@@ -10,6 +10,8 @@
     "download:gaiji": "node scripts/download-gaiji-data.mjs",
     "build:concordance": "python scripts/build-concordance-data.py",
     "build:metadata": "python3 scripts/build-kanripo-metadata.py",
+    "build:skqs-authors": "python3 scripts/build-skqs-author-wikidata.py",
+    "intake:skqs-norbert": "python3 scripts/skqs_norbert_intake.py",
     "fetch:ctext": "node scripts/fetch-ctext-parallel.mjs",
     "test:ctext-wiki": "node --test scripts/ctext-wiki-parallel.test.mjs",
     "test:wikisource": "node --test scripts/wikisource-parallel.test.mjs",

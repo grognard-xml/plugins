@@ -1,0 +1,9 @@
+# Local Norbert DB credentials — never commit
+sql_norbert.py
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Release staging (generated during build-release.mjs)
+release/.staging/
