@@ -1,5 +1,5 @@
 person_name,dynasty,work_count,functions,sample_kr_id,qid,cbdb_id,norbert_id,cbdb_hint
-王禕,明,5,刊定;奉敕撰;撰,KR2a0036,,,,元史→耐久道人(cbdb:34415); 元史→尚絅(cbdb:576940)
+王禕,明,5,刊定;奉敕撰;撰,KR2a0036,,,,元史→陶凱(cbdb:34415); 元史→尚絅(cbdb:576940)
 何大任,宋,2,校訂;編,KR3e0031,,,,
 來保,清,2,奉敕撰,KR2c0011,,,,
 劉道醇,宋,2,撰,KR3h0014,,,,
@@ -13,7 +13,7 @@ person_name,dynasty,work_count,functions,sample_kr_id,qid,cbdb_id,norbert_id,cbd
 裴駰,南朝宋,2,撰;集解,KR2a0001,,,,
 陳起,宋,2,編,KR4h0053,,,,
 高保衡,宋,2,校正;校注,KR3e0005,,,,
-魏之琇,清,2,撰;考證,KR3e0075,,,,名醫類案→雯來(cbdb:695428); 續名醫類案→吳業(cbdb:692408)
+魏之琇,清,2,撰;考證,KR3e0075,,,,名醫類案→許璞(cbdb:695428); 續名醫類案→吳業(cbdb:692408)
 魏仲舉,宋,2,編,KR4c0045,,,,
 黃石公,秦,2,撰,KR3b0007,,,,
 世宗胤禎,清,1,御定,KR1f0012,,,,
@@ -138,7 +138,7 @@ person_name,dynasty,work_count,functions,sample_kr_id,qid,cbdb_id,norbert_id,cbd
 王燧,明,1,撰,KR4e0089,,,,青城山人集→文靖(cbdb:126499)
 王霆震,宋,1,編,KR4h0058,,,,
 珞琭子,,1,撰,KR3g0038,,,,
-白挺,元,1,撰,KR3j0137,,,,湛淵靜語→湛淵(cbdb:10833)
+白挺,元,1,撰,KR3j0137,,,,湛淵靜語→白珽(cbdb:10833)
 盧辯,北周,1,註,KR1d0076,,,,
 祖行,宋,1,編,KR4d0055,,,,
 程川,清,1,撰,KR1g0027,,,,
@@ -185,7 +185,7 @@ person_name,dynasty,work_count,functions,sample_kr_id,qid,cbdb_id,norbert_id,cbd
 衞涇,宋,1,撰,KR4d0290,,,,
 衞湜,宋,1,撰,KR1d0057,,,,
 袁□,宋,1,撰,KR3l0056,,,,
-袁衮,明,1,撰,KR3a0095,,,,世緯→永之(cbdb:35261)
+袁衮,明,1,撰,KR3a0095,,,,世緯→胥臺(cbdb:35261)
 褚峻,清,1,摹圖,KR2n0046,,,,
 襲明之,宋,1,撰,KR2k0114,,,,
 西方子,,1,撰,KR3e0018,,,,
@@ -256,7 +256,7 @@ person_name,dynasty,work_count,functions,sample_kr_id,qid,cbdb_id,norbert_id,cbd
 馬后,,1,撰,KR3b0001,,,,
 馬隆述,晉,1,讚,KR3b0001,,,,
 馮琦原,明,1,編,KR2c0007,,,,
-駱居安,明,1,編,KR4e0061,,,,竹齋集→劉懋夏(cbdb:75377)
+駱居安,明,1,編,KR4e0061,,,,竹齋集→公蕃(cbdb:75377)
 高宗趙構,唐,1,御撰,KR3h0013,,,,
 高德基,元,1,撰,KR2k0123,,,,
 高晦叟,宋,1,撰,KR3l0050,,,,

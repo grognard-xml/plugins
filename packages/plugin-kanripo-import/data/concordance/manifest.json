@@ -1,6 +1,6 @@
 {
   "packKind": "ljb-kanripo-concordance",
-  "generatedAt": "2026-08-30T19:43:53+00:00",
+  "generatedAt": "2026-08-30T19:49:19+00:00",
   "files": {
     "krp_dz_collation.csv": "KR_ID ↔ DZID work-level collation (~1500 Daoist texts)",
     "kanripo_org_concordance.csv": "Kanripo.org catalogue ↔ CBETA/DZID",

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "builtAt": "2026-08-30T19:44:36.569Z",
+  "builtAt": "2026-08-30T19:49:30.927Z",
   "plugins": [
     {
       "id": "cjk-dates",
@@ -125,7 +125,7 @@
       },
       "fileName": "ljb-plugin-cjk-dates-0.1.0.tar.gz",
       "bytes": 5417,
-      "sha256": "14073c658f48ee70d2d69e80a5cae82f9046a97469f1d3a8f48986f2cd50a8f1"
+      "sha256": "fc4b3d0178b0a17ce0c5d238fa5051878a88637588dd33283ed137442677477e"
     },
     {
       "id": "daozang-import",
@@ -200,8 +200,8 @@
         ]
       },
       "fileName": "ljb-plugin-daozang-import-0.1.0.tar.gz",
-      "bytes": 37999324,
-      "sha256": "4339cd28162fd2d85d4e5577e4c32fc111cdb857b29aee452410bda5ec28719b"
+      "bytes": 37999035,
+      "sha256": "74a8302e50d11fce8cf49eb9d8b3866d1453272d316c12f063fed84071d98e18"
     },
     {
       "id": "kanripo-import",
@@ -303,8 +303,8 @@
         ]
       },
       "fileName": "ljb-plugin-kanripo-import-0.1.0.tar.gz",
-      "bytes": 6502377,
-      "sha256": "72ff02ba9bd8bcc3fb8f3a20bdd203de0d359f1023e521910e22810aa28ad8e2"
+      "bytes": 6502459,
+      "sha256": "ae2a1cc76749fdeb8245e3ad977b69317a481f17167869e54552b52c7cab680b"
     },
     {
       "id": "norbert",
@@ -482,8 +482,8 @@
         ]
       },
       "fileName": "ljb-plugin-norbert-0.1.0.tar.gz",
-      "bytes": 412979,
-      "sha256": "8e29c974783cdcbbfbb8b328b215a80b279762d38b03a0ef107a5bfc40484cf9"
+      "bytes": 412976,
+      "sha256": "f7b016f6c5e2f3de122451640d387cf9bb4f158ae5f1773138b66f4bf2cb5cc5"
     }
   ]
 }
