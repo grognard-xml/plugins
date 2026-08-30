@@ -1,21 +1,25 @@
 {
   "packKind": "ljb-kanripo-metadata",
-  "generatedAt": "2026-08-30T08:21:19+00:00",
+  "generatedAt": "2026-08-30T19:43:44+00:00",
   "stats": {
     "works": 9336,
     "with_dzid": 1519,
     "with_authorship": 4014,
     "multi_author_works": 737,
     "with_time_dynasty": 3369,
-    "with_author_dates": 2376,
+    "with_author_dates": 2368,
+    "with_edition_label": 4882,
     "authorship_with_person_id": 806,
+    "authorship_with_wikidata_qid": 4187,
     "with_wikidata_qid": 2596,
     "wikidata_crossref_merged": 2596,
-    "wikidata_pack_qids_loaded": 1559,
-    "wikidata_with_primary_name": 1548,
-    "wikidata_with_aliases": 1548,
-    "wikidata_with_description": 1548,
+    "wikidata_pack_qids_loaded": 0,
+    "wikidata_with_primary_name": 0,
+    "wikidata_with_aliases": 0,
+    "wikidata_with_description": 0,
     "parallel_daozang_bundled": 1465,
-    "parallel_wikisource_from_wikidata": 2596
+    "parallel_wikisource_from_wikidata": 2596,
+    "skqs_authors_resolved": 2623,
+    "skqs_authors_unresolved": 269
   }
 }

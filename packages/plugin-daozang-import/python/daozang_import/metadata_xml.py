@@ -71,7 +71,7 @@ def build_metadata_xml(work: WorkMetadata) -> str:
                 _attr("ws_page", wd.ws_page),
             ]
         )
-    vols_attrs = "".join([_attr("n", work.vols), _attr("type", "")])
+    vols_attrs = _attr("n", work.vols)
     authorship_blocks = "\n".join(_authorship_xml(a) for a in work.authorship)
     date_block = _date_xml(work)
     parts = [
@@ -139,6 +139,9 @@ def work_metadata_to_dict(work: WorkMetadata) -> dict[str, object]:
                 "author_index": a.author_index,
                 "person_name": a.person_name,
                 "person_id": a.person_id,
+                "wikidata_qid": a.wikidata_qid,
+                "cbdb_id": a.cbdb_id,
+                "norbert_id": a.norbert_id,
                 "function": a.function,
                 "time_dynasty": a.time_dynasty,
                 "author_dates": a.author_dates,

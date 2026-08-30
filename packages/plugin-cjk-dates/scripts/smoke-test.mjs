@@ -16,10 +16,15 @@ const packageRoot = path.join(__dirname, '..');
 const manifestPath = path.join(packageRoot, 'plugin.manifest.json');
 const registerPath = path.join(packageRoot, 'dist/register.mjs');
 const registerSourcePath = path.join(packageRoot, 'src/register.ts');
-const hostUiPath = path.resolve(
-  packageRoot,
-  '../../../lejeanbaptiste/packages/cwrc-leafwriter/src/plugins/hostModules/cjkDatesUi.ts',
-);
+const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/cjkDatesUi.ts';
+const hostUiPath = [
+  process.env.LJB_HOST_ROOT,
+  path.resolve(packageRoot, '../../../leaf-writer'),
+  path.resolve(packageRoot, '../../../lejeanbaptiste'),
+]
+  .filter(Boolean)
+  .map((root) => path.join(root, hostUiRel))
+  .find((candidate) => fs.existsSync(candidate));
 const pythonScript = path.join(packageRoot, 'scripts/download-python-runtime.mjs');
 
 const log = (message) => console.log(`[smoke:cjk-dates] ${message}`);
@@ -48,7 +53,10 @@ if (!fs.existsSync(registerPath)) {
 }
 
 log('checking host UI module wiring…');
-assert.ok(fs.existsSync(hostUiPath), `host UI module missing: ${hostUiPath}`);
+assert.ok(
+  hostUiPath,
+  'host UI module missing (leaf-writer sibling, lejeanbaptiste sibling, or LJB_HOST_ROOT)',
+);
 const hostUiSource = fs.readFileSync(hostUiPath, 'utf8');
 assert.match(hostUiSource, /registerCjkDatesUi/, 'host module must export registerCjkDatesUi');
 assert.match(hostUiSource, /registerDialog\('calendar'/, 'host module must register calendar dialog');

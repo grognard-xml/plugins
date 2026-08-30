@@ -211,17 +211,33 @@ def main() -> None:
     args = parser.parse_args()
 
     tables = args.metadata_root / "tables_output"
-    src_krp_dz = tables / "krp_dz_collation.csv"
-    src_org = tables / "kanripo_org_concordance.csv"
-    src_dz_works = tables / "dz_metadata_works.csv"
-    src_duren = args.dz_krp_root / "index.csv"
-
-    for p in (src_krp_dz, src_org, src_dz_works, args.daozang_index):
-        if not p.is_file():
-            raise SystemExit(f"Missing required input: {p}")
-
     out = args.out_dir
     out.mkdir(parents=True, exist_ok=True)
+
+    def _input_or_bundled(primary: Path, bundled_name: str, label: str) -> Path:
+        if primary.is_file():
+            return primary
+        bundled = out / bundled_name
+        if bundled.is_file():
+            print(f"Using bundled {label}: {bundled}")
+            return bundled
+        raise SystemExit(f"Missing required input: {primary} (no bundled fallback at {bundled})")
+
+    src_krp_dz = _input_or_bundled(tables / "krp_dz_collation.csv", "krp_dz_collation.csv", "krp_dz_collation")
+    src_org = _input_or_bundled(
+        tables / "kanripo_org_concordance.csv",
+        "kanripo_org_concordance.csv",
+        "kanripo_org_concordance",
+    )
+    src_dz_works = _input_or_bundled(
+        tables / "dz_metadata_works.csv",
+        "dz_corpus_works.csv",
+        "dz_corpus_works",
+    )
+    src_duren = args.dz_krp_root / "index.csv"
+
+    if not args.daozang_index.is_file():
+        raise SystemExit(f"Missing required input: {args.daozang_index}")
 
     overrides_path = out / "kanripo_daozang_overrides.csv"
     if not overrides_path.is_file():
@@ -231,8 +247,12 @@ def main() -> None:
             [],
         )
 
-    shutil.copy2(src_krp_dz, out / "krp_dz_collation.csv")
-    shutil.copy2(src_org, out / "kanripo_org_concordance.csv")
+    def _stage_csv(src: Path, dest: Path) -> None:
+        if src.resolve() != dest.resolve():
+            shutil.copy2(src, dest)
+
+    _stage_csv(src_krp_dz, out / "krp_dz_collation.csv")
+    _stage_csv(src_org, out / "kanripo_org_concordance.csv")
 
     dz_work_rows = _read_csv_rows(src_dz_works)
     _write_csv(
@@ -254,6 +274,8 @@ def main() -> None:
     if src_duren.is_file():
         shutil.copy2(src_duren, out / "duren_jing_index.csv")
         duren_rows = _read_csv_rows(src_duren)
+    elif (out / "duren_jing_index.csv").is_file():
+        duren_rows = _read_csv_rows(out / "duren_jing_index.csv")
     else:
         duren_rows = []
 

@@ -15,8 +15,9 @@ Self-contained hybrid plugin: Mandoku → TEI conversion, bundled gaiji tables/P
 | KR-Gaiji charlist + PNGs | `data/gaiji/` |
 | DPM + hard-replacement CSVs | `data/normalize/` |
 | Parallel punctuation | `python/kanripo_import/parallel_punct.py` |
-| Work search index | `data/krp_works.json` |
-| Work metadata (authors, dynasty, dates, vols, Wikidata) | `data/metadata/krp_works_by_id.json` |
+| Work search index (id, section, title, dynasty, authors, dzid) | `data/krp_works.json` |
+| Work metadata (authors, dynasty, dates, vols, edition, Wikidata) | `data/metadata/krp_works_by_id.json` |
+| Edition profile table (SKQS WYG, 正統道藏, …) | `data/metadata/edition_profiles.json` |
 | KR ↔ DZ / Daozang concordance | `data/concordance/` |
 | KRP parallel-source crosswalk (WS + Daozang buttons) | `data/concordance/krp_parallel_sources.json` |
 | Wizard UI | LJB host module (`kanripoImportUi`) |
@@ -48,6 +49,7 @@ Bundled under `data/metadata/` for offline KR_ID lookup at import time.
 | `dz_metadata_authors.csv` | All Daozang authors with Norbert `person_id` |
 | `DZ_metadata_normalized.csv` | Dynasty and date hints for Daozang works |
 | `krp_wikidata_qids.json` | SKQS ↔ Wikisource match export (Q-ids, `ws_page`, `match_tier`) |
+| `kr_classification.json` | KR 部/類 labels, fetched from the upstream KR-Catalog |
 
 KR_ID → DZID crosswalk: bundled `data/concordance/krp_dz_collation.csv` and `kanripo_org_concordance.csv`.
 
@@ -57,6 +59,7 @@ KR_ID → DZID crosswalk: bundled `data/concordance/krp_dz_collation.csv` and `k
 | --- | --- |
 | `krp_works_by_id.json` | Runtime lookup (~9k works): SKQS/DZ bibliographic metadata |
 | `krp_wikidata_by_kr_id.json` | Runtime lookup (~2.6k works): Q-ids, Wikisource URLs, pack enrichment |
+| `../krp_works.json` | Slim, pre-joined index the import window searches |
 | `manifest.json` | Build stats (counts, timestamp) |
 
 Wikidata is kept in a **separate sidecar file** so the main metadata blob stays smaller and Q-id pairs are not duplicated inside every work record. At import time Python joins the two lookups by `kr_id`.
@@ -69,6 +72,26 @@ Rebuild:
 npm run build:metadata -w @ljb/plugin-kanripo-import
 ```
 
+The full build needs the optional Wikidata authority pack (`--wikidata-pack`); without it the
+pack enrichment in `krp_works_by_id.json` is lost. To refresh only the search index from the
+metadata already built:
+
+```bash
+python3 scripts/build-kanripo-metadata.py --index-only
+```
+
+### Section labels
+
+`data/metadata/sources/kr_classification.json` holds the 部/類 labels shown as the first line of each
+search result (經部・易類, 道部・洞真部, 佛部・禪宗部類). It is fetched from the upstream
+[KR-Catalog](https://github.com/kanripo/KR-Catalog) — never hand-edited:
+
+```bash
+python3 scripts/fetch-kr-classification.py
+```
+
+`KR2p` has works here but no heading upstream, so those three rows show 史部 alone.
+
 ### Fields per work (`krp_works_by_id.json`)
 
 **Always (from Kanripo catalog):**
@@ -79,7 +102,11 @@ npm run build:metadata -w @ljb/plugin-kanripo-import
 | `title` | Work title (SKQS or Daozang overrides Kanripo when present) |
 | `juan_count` | Number of juan files in Kanripo |
 | `vols` | Extent in 卷: SKQS `EXTENT`, else Daozang vols, else juan count |
-| `source` | Edition string (SKQS `SOURCE`, or 正統道藏 for DZ-only) |
+| `source` | Raw edition string (SKQS `SOURCE`, or 正統道藏 for DZ-only) |
+| `edition_profile` | Profile id from `edition_profiles.json` (e.g. `skqs_wyg`) |
+| `edition_label` | Structured edition name for TEI (e.g. 文淵閣四庫全書) |
+| `edition_date` | Year of edition (e.g. `1782` for SKQS WYG) |
+| `source_locator` | SKQS volume/page locator (e.g. `V143.1, p1 - V144.1`) |
 | `cbeta_id` | CBETA id from org concordance |
 | `dzid` | Normalized Daozang id when mapped |
 | `time_dynasty` | Dynasty (SKQS → author → DZ normalized hints) |
@@ -119,6 +146,12 @@ npm run build:metadata -w @ljb/plugin-kanripo-import
 
 ### What lands in imported TEI
 
+**`<teiHeader>` biblStruct (LJB file metadata panel):**
+
+- `monogr/edition` ← `edition_label`
+- `monogr/imprint/date@when` ← `edition_date`
+- `biblStruct/note` ← Kanripo id, juan, file witness, SKQS locator
+
 **`<teiHeader>` idnos:**
 
 - `Kanripo`, `CBETA`, `DZID`
@@ -128,7 +161,7 @@ npm run build:metadata -w @ljb/plugin-kanripo-import
 
 **`<metadata>` block (DPM convention):**
 
-- `<citation>` attrs: kr_id, title, source, cbeta_id, dz_id, juan, Q-ids, ws_page
+- `<citation>` attrs: kr_id, title, source, edition_profile, edition_label, edition_date, source_locator, cbeta_id, dz_id, juan, Q-ids, ws_page
 - `<work>`: title, vols, `<authorship>` / `<persName>`
 - `<date>`: dynasty, notBefore/notAfter
 - `<wikidata>`: workQid, editionQid, wsPage, wsUrl, primaryName, aliases (up to 12)

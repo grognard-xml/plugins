@@ -1,9 +1,5 @@
-/**
- * Daozang import plugin entry. UI lives in the LJB host webpack bundle.
- */
-
-const HOST_UI_MODULE = "daozang-import-ui";
-
+// src/register.ts
+var HOST_UI_MODULE = "daozang-import-ui";
 async function register(context) {
   context.log("loading Daozang import UI from host");
   const ui = await context.loadHostModule(HOST_UI_MODULE);
@@ -12,5 +8,7 @@ async function register(context) {
   }
   ui.registerDaozangImportUi(context);
 }
-
-export { register };
+export {
+  register
+};
+//# sourceMappingURL=register.mjs.map

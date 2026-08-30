@@ -17,7 +17,7 @@ const mod = await import(pathToFileURL(registerPath).href);
 assert.equal(typeof mod.register, 'function');
 
 let registered = false;
-mod.register({
+await mod.register({
   pluginId: 'norbert',
   log: (msg) => console.log(`[smoke] ${msg}`),
   registerPersonNameSegmenter: (fn) => {
@@ -33,6 +33,13 @@ mod.register({
       romanizedName: 'Wang Anshi',
     });
   },
+  loadHostModule: async () => ({
+    registerNorbertNobleTitleUi: () => undefined,
+  }),
+  registerToolAction: () => undefined,
+  registerDialog: () => undefined,
+  registerReviewPanel: () => undefined,
+  registerToolbarItem: () => undefined,
 });
 
 assert.equal(registered, true);

@@ -64,6 +64,13 @@ class TestKanripoWorkMetadata(unittest.TestCase):
         self.assertEqual(work.authorship[0].date_not_before, "-507")
         self.assertEqual(work.authorship[0].date_not_after, "-400")
 
+    def test_kr1a0003_hybrid_author_wikidata(self) -> None:
+        work = lookup_work_metadata("KR1a0003")
+        assert work is not None
+        by_name = {a.person_name: a.wikidata_qid for a in work.authorship}
+        self.assertEqual(by_name.get("王應麟"), "Q5365469")
+        self.assertEqual(by_name.get("鄭玄"), "Q197649")
+
     def test_chen_jingyuan_daoist_person_id(self) -> None:
         work = lookup_work_metadata("KR5a0087")
         assert work is not None
@@ -71,6 +78,17 @@ class TestKanripoWorkMetadata(unittest.TestCase):
         self.assertEqual(work.authorship[0].person_name, "陳景元")
         self.assertEqual(work.authorship[0].person_id, "15903")
         self.assertEqual(work.source, "正統道藏 Zhengtong Daozang")
+        self.assertEqual(work.edition_profile, "zhengdaozang")
+        self.assertEqual(work.edition_label, "正統道藏")
+        self.assertEqual(work.edition_date, "1445")
+
+    def test_skqs_edition_fields(self) -> None:
+        work = lookup_work_metadata("KR1e0004")
+        assert work is not None
+        self.assertEqual(work.edition_label, "文淵閣四庫全書")
+        self.assertEqual(work.edition_date, "1782")
+        self.assertEqual(work.source_locator, "V143.1, p1 - V144.1")
+        self.assertEqual(work.edition_profile, "skqs_wyg")
 
     def test_dz_multi_author_kr5a0001(self) -> None:
         work = lookup_work_metadata("KR5a0001")

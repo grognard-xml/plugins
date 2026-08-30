@@ -9,6 +9,10 @@ from functools import lru_cache
 from typing import Any
 
 from daozang_import._paths import metadata_dir
+from daozang_import.authorship_authority import (
+    clear_authorship_authority_cache,
+    enrich_authorship_rows,
+)
 
 _DYNASTY_AUTHOR_RE = re.compile(r"-([^-]+)-([^-]+)\.txt$", re.UNICODE)
 
@@ -29,6 +33,9 @@ class AuthorshipRecord:
     author_index: str
     person_name: str
     person_id: str
+    wikidata_qid: str
+    cbdb_id: str
+    norbert_id: str
     function: str
     time_dynasty: str
     author_dates: str
@@ -81,14 +88,24 @@ def _parse_wikidata(raw: dict[str, Any] | None) -> WikidataMetadata | None:
     )
 
 
-def _parse_authorship(raw: list[dict[str, str]] | None) -> tuple[AuthorshipRecord, ...]:
+def _parse_authorship(
+    raw: list[dict[str, str]] | None,
+    *,
+    kr_id: str = "",
+    wikidata_raw: dict[str, Any] | None = None,
+) -> tuple[AuthorshipRecord, ...]:
+    rows = [dict(row) for row in (raw or [])]
+    enrich_authorship_rows(rows, kr_id=kr_id, wikidata_raw=wikidata_raw)
     out: list[AuthorshipRecord] = []
-    for row in raw or []:
+    for row in rows:
         out.append(
             AuthorshipRecord(
                 author_index=(row.get("author_index") or "").strip(),
                 person_name=(row.get("person_name") or "").strip(),
                 person_id=(row.get("person_id") or "").strip(),
+                wikidata_qid=(row.get("wikidata_qid") or "").strip(),
+                cbdb_id=(row.get("cbdb_id") or "").strip(),
+                norbert_id=(row.get("norbert_id") or row.get("person_id") or "").strip(),
                 function=(row.get("function") or "").strip(),
                 time_dynasty=(row.get("time_dynasty") or "").strip(),
                 author_dates=(row.get("author_dates") or "").strip(),
@@ -115,7 +132,11 @@ def _record_from_raw(row: dict[str, Any]) -> WorkMetadata:
         date_not_before=(row.get("date_not_before") or "").strip(),
         date_not_after=(row.get("date_not_after") or "").strip(),
         author_dates=(row.get("author_dates") or "").strip(),
-        authorship=_parse_authorship(row.get("authorship")),
+        authorship=_parse_authorship(
+            row.get("authorship"),
+            kr_id=(row.get("kr_id") or "").strip(),
+            wikidata_raw=row.get("wikidata") if isinstance(row.get("wikidata"), dict) else None,
+        ),
         wikidata=_parse_wikidata(row.get("wikidata")),
     )
 
@@ -146,3 +167,4 @@ def lookup_work_metadata(rel_path: str) -> WorkMetadata | None:
 def clear_work_metadata_cache() -> None:
     _load_doc.cache_clear()
     load_work_metadata_index.cache_clear()
+    clear_authorship_authority_cache()

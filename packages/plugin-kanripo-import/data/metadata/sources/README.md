@@ -17,6 +17,7 @@ Concordance inputs live in `data/concordance/` (`krp_dz_collation.csv`, `kanripo
 
 | Built output | Location |
 |--------|----------|
+| Edition profile table | `../edition_profiles.json` |
 | Work metadata lookup (SKQS/DZ only) | `../krp_works_by_id.json` |
 | Wikidata crossref lookup (KR → Q-id, WS) | `../krp_wikidata_by_kr_id.json` |
 | Parallel punctuation crosswalk (Daozang paths only) | `../../concordance/krp_parallel_sources.json` |

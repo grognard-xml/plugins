@@ -6,7 +6,8 @@ Reads bundled CSVs under ``data/metadata/sources/`` and ``data/concordance/``.
 When a KR_ID maps to a DZID, full Daozang metadata (all authors, vols, dates)
 is merged in from ``dz_metadata_*`` tables.
 
-Output: data/metadata/krp_works_by_id.json + manifest.json
+Output: data/metadata/krp_works_by_id.json + manifest.json,
+plus data/krp_works.json (the slim index the import window searches)
 """
 
 from __future__ import annotations
@@ -17,19 +18,30 @@ import json
 import os
 import re
 import shutil
+import sys
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import quote
 
-from wikidata_pack_index import enrich_from_pack, load_works_by_qid
+_PLUGIN_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(_PLUGIN_ROOT / "python"))
+sys.path.insert(0, str(_PLUGIN_ROOT / "scripts"))
+
+from kanripo_import.authorship_wikidata import enrich_authorship_rows
+from kanripo_import.edition import resolve_edition
+from wikidata_pack_index import enrich_from_pack, load_persons_by_primary_name, load_works_by_qid
+from wikidata_work_authors import authors_for_work_record, fetch_authors_for_work_qids
+
+# Import SKQS author table builder (same scripts/ dir).
+from build_skqs_author_wikidata import build_skqs_author_table, write_skqs_author_artifacts
 
 _DATES_RE = re.compile(r"^\s*(-?\d+)\s*-\s*(-?\d+)\s*$")
 _EXTENT_RE = re.compile(r"(\d+)")
 
 
 def _plugin_root() -> Path:
-    return Path(__file__).resolve().parents[1]
+    return _PLUGIN_ROOT
 
 
 def _sources_dir() -> Path:
@@ -121,6 +133,65 @@ def _load_normalized_hints(path: Path) -> tuple[dict[str, dict], dict[tuple[str,
         if dzid and author:
             by_author[(dzid, author)] = hint
     return by_dzid, by_author
+
+
+def _default_person_pack_roots() -> list[Path]:
+    root = _plugin_root()
+    candidates = [
+        root.parents[2] / "authority extraction" / "packs" / "wikidata",
+        root.parents[2] / "authoritypacks" / "packs" / "wikidata",
+        root.parents[3] / "authority extraction" / "packs" / "wikidata",
+        root.parents[3] / "authoritypacks" / "packs" / "wikidata",
+    ]
+    env = os.environ.get("LJB_WIKIDATA_PERSON_PACK_ROOT", "").strip()
+    if env:
+        candidates.insert(0, Path(env))
+    return [path for path in candidates if path.is_dir()]
+
+
+def _attach_wikidata_authors(
+    entries: dict[str, dict],
+    *,
+    authors_by_qid: dict[str, list[dict]],
+) -> int:
+    """Store P50/P98 author rows on each entry's wikidata block."""
+    attached = 0
+    for entry in entries.values():
+        wd = entry.get("wikidata")
+        if not isinstance(wd, dict):
+            continue
+        authors = authors_for_work_record(
+            str(wd.get("work_qid") or ""),
+            str(wd.get("edition_qid") or ""),
+            authors_by_qid=authors_by_qid,
+        )
+        if authors:
+            wd["wikidata_authors"] = authors
+            attached += 1
+    return attached
+
+
+def _enrich_authorship_wikidata(
+    entries: dict[str, dict],
+    *,
+    persons_by_name: dict[str, str],
+    skqs_authors: dict[str, str] | None = None,
+    skqs_authorities: dict[str, dict[str, str]] | None = None,
+) -> int:
+    """Attach ``wikidata_qid`` / ``cbdb_id`` via work P50/P98, SKQS table, then person-pack lookup."""
+    enriched = 0
+    skqs_authors = skqs_authors or {}
+    skqs_authorities = skqs_authorities or {}
+    for entry in entries.values():
+        wd = entry.get("wikidata") if isinstance(entry.get("wikidata"), dict) else {}
+        enriched += enrich_authorship_rows(
+            entry.get("authorship") or [],
+            wikidata_authors=wd.get("wikidata_authors") or [],
+            skqs_authors=skqs_authors,
+            skqs_authorities=skqs_authorities,
+            persons_by_name=persons_by_name,
+        )
+    return enriched
 
 
 def _default_wikidata_pack_path() -> Path | None:
@@ -451,12 +522,18 @@ def build_entries(
                 work_na = a.get("date_not_after") or ""
                 break
 
+        edition = resolve_edition(source=source)
+
         out[kr_id] = {
             "kr_id": kr_id,
             "title": title,
             "vols": extent,
             "juan_count": juan_count,
             "source": source,
+            "edition_profile": edition.edition_profile,
+            "edition_label": edition.edition_label,
+            "edition_date": edition.edition_date,
+            "source_locator": edition.source_locator,
             "cbeta_id": org.get("cbeta_id") or "",
             "dzid": dzid,
             "time_dynasty": dynasty,
@@ -470,6 +547,74 @@ def build_entries(
             },
         }
     return out
+
+
+
+def _load_kr_classification() -> tuple[dict[str, str], dict[str, str]]:
+    """Part and class labels from the upstream KR-Catalog.
+
+    Refresh with ``scripts/fetch-kr-classification.py``.
+    """
+    path = _sources_dir() / "kr_classification.json"
+    if not path.is_file():
+        raise SystemExit(
+            f"Missing {path.name}. Run: python3 scripts/fetch-kr-classification.py"
+        )
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    return doc.get("parts") or {}, doc.get("classes") or {}
+
+
+def kr_section(kr_id: str, parts: dict[str, str], classes: dict[str, str]) -> str:
+    """e.g. KR1a0030 -> 經部・易類. Falls back to the part alone when the class is
+    not in the catalogue (KR2p has works here but no upstream heading)."""
+    part = parts.get(kr_id[:3], "")
+    klass = classes.get(kr_id[:4], "")
+    if part and klass:
+        return f"{part}・{klass}"
+    return part or klass
+
+
+def format_authors(entry: dict) -> str:
+    parts = []
+    for record in entry.get("authorship") or []:
+        name = (record.get("person_name") or "").strip()
+        if not name:
+            continue
+        function = (record.get("function") or "").strip()
+        parts.append(f"{name}（{function}）" if function else name)
+    return "、".join(parts)
+
+
+def entry_dynasty(entry: dict) -> str:
+    dynasty = (entry.get("time_dynasty") or "").strip()
+    if dynasty:
+        return dynasty
+    for record in entry.get("authorship") or []:
+        if (record.get("time_dynasty") or "").strip():
+            return record["time_dynasty"].strip()
+    return ""
+
+
+def write_search_index(entries: dict[str, dict]) -> list[dict[str, str]]:
+    """The slim, pre-joined index read by the desktop search."""
+    parts, classes = _load_kr_classification()
+    rows = [
+        {
+            "id": kr_id,
+            "section": kr_section(kr_id, parts, classes),
+            "title": (entry.get("title") or "").strip(),
+            "dynasty": entry_dynasty(entry),
+            "authors": format_authors(entry),
+            "dzid": (entry.get("dzid") or "").strip(),
+        }
+        for kr_id, entry in entries.items()
+    ]
+    rows.sort(key=lambda row: row["id"])
+    (_plugin_root() / "data" / "krp_works.json").write_text(
+        json.dumps(rows, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return rows
 
 
 def main() -> None:
@@ -488,7 +633,26 @@ def main() -> None:
         help="Path to wikidata/work-zh-hant/works.ndjson (optional enrichment)",
     )
     parser.add_argument("--out-dir", type=Path, default=_plugin_root() / "data" / "metadata")
+    parser.add_argument(
+        "--skip-wikidata-fetch",
+        action="store_true",
+        help="Skip live Wikidata API fetch for work P50/P98 (offline rebuild)",
+    )
+    parser.add_argument(
+        "--index-only",
+        action="store_true",
+        help="Rewrite data/krp_works.json from the existing metadata, without rebuilding it "
+        "(the full build needs the optional Wikidata pack to preserve its enrichment)",
+    )
     args = parser.parse_args()
+
+    if args.index_only:
+        entries = json.loads(
+            (args.out_dir / "krp_works_by_id.json").read_text(encoding="utf-8")
+        )["entries"]
+        rows = write_search_index(entries)
+        print(f"Wrote {len(rows)} search index rows to data/krp_works.json")
+        return
 
     if args.sync_from:
         sync_sources(metadata_root=args.sync_from, sources=args.sources_dir)
@@ -527,6 +691,9 @@ def main() -> None:
         norm_by_dzid=norm_by_dzid,
     )
 
+    person_roots = _default_person_pack_roots()
+    persons_by_name = load_persons_by_primary_name(person_roots)
+
     qids_path = args.sources_dir / "krp_wikidata_qids.json"
     qids_by_kr = _load_krp_wikidata_qids(qids_path)
     pack_path = args.wikidata_pack or _default_wikidata_pack_path()
@@ -542,6 +709,70 @@ def main() -> None:
         print(f"Wikidata authority pack: {_rel_source(pack_path)} ({len(pack_by_qid)} Q-ids loaded)")
     else:
         print("Wikidata authority pack: not found (skip --wikidata-pack or set LJB_WIKIDATA_WORK_PACK)")
+
+    work_qids: list[str] = []
+    for entry in entries.values():
+        wd = entry.get("wikidata") if isinstance(entry.get("wikidata"), dict) else {}
+        for key in ("work_qid", "edition_qid", "wikidata_work_qid"):
+            qid = (wd.get(key) or "").strip()
+            if qid:
+                work_qids.append(qid)
+    authors_by_qid: dict[str, list[dict]] = {}
+    if not args.skip_wikidata_fetch and work_qids:
+        authors_by_qid = fetch_authors_for_work_qids(work_qids)
+        print(f"Wikidata work authors: fetched P50/P98 for {len(authors_by_qid)} work/edition Q-ids")
+    elif args.skip_wikidata_fetch:
+        print("Wikidata work authors: skipped (--skip-wikidata-fetch)")
+    wd_authors_attached = _attach_wikidata_authors(entries, authors_by_qid=authors_by_qid)
+
+    wikidata_sidecar_preview = {
+        kr_id: entry["wikidata"]
+        for kr_id, entry in entries.items()
+        if isinstance(entry.get("wikidata"), dict) and entry["wikidata"].get("wikidata_work_qid")
+    }
+    overrides_path = args.sources_dir / "skqs_author_wikidata_overrides.csv"
+    overrides: dict[str, dict[str, str]] = {}
+    if overrides_path.is_file():
+        from build_skqs_author_wikidata import _load_overrides
+
+        overrides = _load_overrides(overrides_path)
+    skqs_entries, skqs_stats, skqs_authors_full, _skqs_cache = build_skqs_author_table(
+        _read_csv(skqs_csv),
+        wikidata_sidecar=wikidata_sidecar_preview,
+        overrides=overrides,
+        person_pack_roots=person_roots,
+    )
+    skqs_index = {key: row["wikidata_qid"] for key, row in skqs_entries.items() if row.get("wikidata_qid")}
+    skqs_authorities = {
+        key: {
+            "wikidata_qid": row.get("wikidata_qid", ""),
+            "cbdb_id": row.get("cbdb_id", ""),
+            "norbert_id": row.get("norbert_id", ""),
+        }
+        for key, row in skqs_entries.items()
+    }
+
+    auth_wd_enriched = _enrich_authorship_wikidata(
+        entries,
+        persons_by_name=persons_by_name,
+        skqs_authors=skqs_index,
+        skqs_authorities=skqs_authorities,
+    )
+    if person_roots:
+        print(
+            f"Wikidata person packs: {len(person_roots)} root(s), "
+            f"{len(persons_by_name)} names indexed"
+        )
+    else:
+        print("Wikidata person packs: not found (name fallback only if index bundled)")
+    print(
+        f"Authorship Wikidata links: {auth_wd_enriched} rows enriched "
+        f"({wd_authors_attached} works with wikidata_authors from P50/P98)"
+    )
+    print(
+        f"SKQS author table: {skqs_stats['resolved']}/{skqs_stats['unique_authors']} resolved "
+        f"({skqs_stats['by_source']})"
+    )
 
     daozang_map_path = _concordance_dir() / "kanripo_daozang_map.json"
     daozang_raw: dict[str, dict] = {}
@@ -565,6 +796,14 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     generated_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
+    write_skqs_author_artifacts(
+        skqs_entries,
+        skqs_stats,
+        authors_full=skqs_authors_full,
+        out_dir=out,
+        generated_at=generated_at,
+    )
+
     with_auth = sum(1 for e in entries.values() if e.get("authorship"))
     multi_auth = sum(1 for e in entries.values() if len(e.get("authorship") or []) > 1)
     with_dz = sum(1 for e in entries.values() if e.get("dzid"))
@@ -580,12 +819,19 @@ def main() -> None:
         for a in e.get("authorship") or []
         if a.get("person_id")
     )
+    with_auth_wd = sum(
+        1
+        for e in entries.values()
+        for a in e.get("authorship") or []
+        if a.get("wikidata_qid")
+    )
     with_wd = sum(1 for e in entries.values() if (e.get("wikidata") or {}).get("wikidata_work_qid"))
     with_wd_primary = sum(1 for e in entries.values() if (e.get("wikidata") or {}).get("primary_name"))
     with_wd_aliases = sum(
         1 for e in entries.values() if (e.get("wikidata") or {}).get("aliases")
     )
     with_wd_desc = sum(1 for e in entries.values() if (e.get("wikidata") or {}).get("description"))
+    with_edition_label = sum(1 for e in entries.values() if (e.get("edition_label") or "").strip())
 
     wikidata_by_kr = _extract_wikidata_sidecar(entries)
 
@@ -624,6 +870,18 @@ def main() -> None:
         encoding="utf-8",
     )
 
+    author_wikidata_payload = {
+        "version": 1,
+        "generatedAt": generated_at,
+        "entryCount": len(persons_by_name),
+        "entries": persons_by_name,
+        "note": "Legacy name-only fallback for non-SKQS authors; prefer krp_skqs_author_wikidata.json",
+    }
+    (out / "krp_author_wikidata_by_name.json").write_text(
+        json.dumps(author_wikidata_payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
     manifest = {
         "packKind": "ljb-kanripo-metadata",
         "generatedAt": generated_at,
@@ -634,7 +892,9 @@ def main() -> None:
             "multi_author_works": multi_auth,
             "with_time_dynasty": with_dynasty,
             "with_author_dates": with_dates,
+            "with_edition_label": with_edition_label,
             "authorship_with_person_id": with_pid,
+            "authorship_with_wikidata_qid": with_auth_wd,
             "with_wikidata_qid": with_wd,
             "wikidata_crossref_merged": wd_merged,
             "wikidata_pack_qids_loaded": len(pack_by_qid),
@@ -647,13 +907,21 @@ def main() -> None:
                 for wd in wikidata_by_kr.values()
                 if (wd.get("ws_url") or "").strip() and (wd.get("ws_page") or "").strip()
             ),
+            "skqs_authors_resolved": skqs_stats.get("resolved"),
+            "skqs_authors_unresolved": skqs_stats.get("unresolved"),
         },
     }
     (out / "manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    search_index = write_search_index(entries)
+
     print(f"Wrote {len(entries)} work metadata entries to {out}")
+    print(
+        f"  search index: {len(search_index)} rows; "
+        f"with section: {sum(1 for row in search_index if row['section'])}"
+    )
     print(
         f"  with DZID: {with_dz}; multi-author: {multi_auth}; "
         f"dynasty: {with_dynasty}; person_id rows: {with_pid}; "

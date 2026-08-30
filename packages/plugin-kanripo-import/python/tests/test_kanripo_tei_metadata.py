@@ -41,6 +41,8 @@ class TestKanripoTeiMetadata(unittest.TestCase):
         self.assertEqual(meta["time_dynasty"], "宋")
         self.assertEqual(meta["vols"], "1")
         self.assertEqual(meta["authorship"][0]["person_name"], "程迥")
+        self.assertEqual(meta["edition_label"], "文淵閣四庫全書")
+        self.assertEqual(meta["edition_date"], "1782")
         self.assertIn('kr_id="KR1a0030"', result["metadata_xml"])
 
 

@@ -6,7 +6,8 @@ import re
 from pathlib import Path
 from typing import TypedDict
 
-from daozang_import.corpus_index import parse_dz_no, title_from_filename, variant_from_relpath
+from daozang_import.constants import SIMP_MARKERS, TRAD_MARKERS
+from daozang_import.corpus_index import parse_dz_no, title_from_filename
 from daozang_import.encoding import decode_legacy_text
 from daozang_import.metadata_xml import build_metadata_xml, work_metadata_to_dict
 from daozang_import.work_metadata import lookup_work_metadata
@@ -38,6 +39,18 @@ class JuanFile(TypedDict):
     juan_title: str
     subtitle: str
     body_xml: str
+
+
+def variant_from_relpath(rel_path: str) -> str:
+    """Traditional vs simplified tree, recorded in the TEI source note."""
+    lowered = rel_path.lower()
+    for marker in TRAD_MARKERS:
+        if marker.lower() in lowered:
+            return "trad"
+    for marker in SIMP_MARKERS:
+        if marker.lower() in lowered:
+            return "simp"
+    return "trad"
 
 
 def _xml_escape(text: str) -> str:

@@ -1,0 +1,16 @@
+{
+  "skqs_wyg": {
+    "label_zh": "文淵閣四庫全書",
+    "label_en": "Wenyuange Siku quanshu",
+    "edition_date": "1782",
+    "source_prefixes": ["四庫全書 文淵閣版"],
+    "witness_codes": ["WYG", "wyg"]
+  },
+  "zhengdaozang": {
+    "label_zh": "正統道藏",
+    "label_en": "Zhengtong Daozang",
+    "edition_date": "1445",
+    "source_prefixes": ["正統道藏"],
+    "witness_codes": ["DZ", "dz"]
+  }
+}

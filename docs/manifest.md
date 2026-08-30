@@ -156,5 +156,18 @@ Validation: `@ljb/plugin-sdk` (`packages/plugin-sdk/validate.mjs`).
 |----|---------|-------|
 | `cjk-dates` | `plugin-cjk-dates` | Premodern China, Japan, Korea dates (Sanmiao) |
 | `norbert` | `plugin-norbert` | Chinese prosopography, noble titles, Norbert pack |
+| `kanripo-import` | `plugin-kanripo-import` | Kanripo Mandoku → TEI, gaiji, parallel punctuation, metadata |
+| `daozang-import` | `plugin-daozang-import` | Bundled Fang Tongzi Daozang corpus, local search + TEI import |
 
-Both manifests are **declarative stubs** — `dist/register.mjs` and Python bridges are not implemented yet.
+Hybrid import plugins (`kanripo-import`, `daozang-import`) ship a thin `dist/register.mjs` that loads dialog UI from the LJB host (`kanripo-import-ui` / `daozang-import-ui` modules in the editor package). The host must be **LJB 0.1.0-beta.4** or newer for those imports.
+
+## Release checklist
+
+```bash
+npm run release:prepare   # validate, build all dist/, refresh metadata JSON, verify bundled paths
+npm run release:smoke     # optional alone; included in release
+npm run release           # full pipeline → release/archives/*.tar.gz + plugins-index.json
+git tag v0.1.0 && git push origin v0.1.0
+```
+
+Large assets (`data/corpus/`, `data/gaiji/`) are committed in this repo so CI can build archives without re-downloading. Rebuild them only when upstream sources change (see each package README).

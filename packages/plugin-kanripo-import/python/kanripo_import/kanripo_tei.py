@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from kanripo_import.commentary import extract_commentary_from_text
+from kanripo_import.edition import resolve_edition
 from kanripo_import.kanripo_gaiji import copy_gaiji_assets, gaiji_graphic_xml, resolve_kanripo_refs
 from kanripo_import.kanripo_io import extract_kanripo_metadata, load_kanripo_text
 from kanripo_import.metadata_xml import build_metadata_xml, work_metadata_to_dict
@@ -250,12 +251,27 @@ def convert_kanripo_txt(
     entities = None
     metadata_xml = ""
     if work:
+        edition_profile = work.edition_profile
+        edition_label = work.edition_label
+        edition_date = work.edition_date
+        source_locator = work.source_locator
+        if not edition_label:
+            fallback = resolve_edition(source=work.source, witness_code=header["source"])
+            edition_profile = fallback.edition_profile
+            edition_label = fallback.edition_label
+            edition_date = fallback.edition_date
+            if not source_locator:
+                source_locator = fallback.source_locator
         meta.update(
             {
                 "title": work.title or meta["title"],
                 "vols": work.vols,
                 "juan_count": work.juan_count,
                 "catalog_source": work.source,
+                "edition_profile": edition_profile,
+                "edition_label": edition_label,
+                "edition_date": edition_date,
+                "source_locator": source_locator,
                 "cbeta_id": work.cbeta_id,
                 "dzid": work.dzid or meta["dzid"],
                 "time_dynasty": work.time_dynasty,

@@ -2,7 +2,7 @@
 
 Import 方瞳子源 (Fang Tongzi) transcriptions of the Zhengtong and Wanli Supplement Daozang into project TEI.
 
-The plugin ships with a **bundled UTF-8 corpus** (`data/corpus/`, 1,513 texts, ~77 MB). Users can search and import immediately after install — no download from third-party sites.
+The plugin ships with a **bundled UTF-8 corpus** (`data/corpus/`, 1,504 texts, ~77 MB) whose `index.json` already carries each work's DZ section, number, title, dynasty, and authorship. Users can search and import immediately after install — no download from third-party sites.
 
 ## Bundled corpus (maintainers)
 
@@ -82,13 +82,14 @@ node scripts/build-corpus-pack.mjs --from-utf8 data/corpus/utf8
 ## User workflow
 
 1. Install and enable the plugin (**Tools → Plugins**).
-2. **File → Import from Daozang…** — bundled corpus is ready immediately.
-3. Optionally **Install corpus from file…** to replace the cache with a newer local copy.
+2. **File → Import from Daozang…** — bundled corpus is ready immediately. Search by title, 道藏 number, section, dynasty, or author.
+
+The corpus is part of the plugin, so there is nothing to install or refresh from the dialog. Maintainers rebuild `data/corpus/` with the scripts above; the Python `install_from_source` / `sync` operations exist for those scripts only.
 
 ## Requirements
 
-- Python 3 on `PATH` (for TEI conversion and optional local corpus install)
-- A RAR extractor only if installing from `.rar` locally: `unar`, `7z`, `unrar`, or `bsdtar`
+- Python 3 on `PATH` (for TEI conversion and for rebuilding the bundled corpus)
+- A RAR extractor only when rebuilding from `.rar`: `unar`, `7z`, `unrar`, or `bsdtar`
 
 ## Development
 

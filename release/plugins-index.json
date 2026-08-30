@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "builtAt": "2026-08-02T13:09:36.315Z",
+  "builtAt": "2026-08-30T19:44:36.569Z",
   "plugins": [
     {
       "id": "cjk-dates",
@@ -124,8 +124,187 @@
         ]
       },
       "fileName": "ljb-plugin-cjk-dates-0.1.0.tar.gz",
-      "bytes": 6192,
-      "sha256": "d0edbcc087c06beab3ffd4bf3cdc2b97296af45dad204109af9a9805244b4caf"
+      "bytes": 5417,
+      "sha256": "14073c658f48ee70d2d69e80a5cae82f9046a97469f1d3a8f48986f2cd50a8f1"
+    },
+    {
+      "id": "daozang-import",
+      "name": "Daozang import",
+      "version": "0.1.0",
+      "description": "Import 方瞳子源 Fang Tongzi Daozang transcriptions from a local file or LJB corpus pack; no third-party downloads.",
+      "author": "Daniel Patrick Morgan",
+      "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-daozang-import",
+      "license": "GPL-2.0",
+      "languages": [
+        "zh-hant",
+        "zh-hans",
+        "lzh"
+      ],
+      "regions": [
+        "east-asia",
+        "china"
+      ],
+      "manifest": {
+        "manifestVersion": "1.0.0",
+        "id": "daozang-import",
+        "name": "Daozang import",
+        "version": "0.1.0",
+        "description": "Import 方瞳子源 Fang Tongzi Daozang transcriptions from a local file or LJB corpus pack; no third-party downloads.",
+        "author": "Daniel Patrick Morgan",
+        "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-daozang-import",
+        "license": "GPL-2.0",
+        "ljb": {
+          "minVersion": "0.1.0"
+        },
+        "languages": [
+          "zh-hant",
+          "zh-hans",
+          "lzh"
+        ],
+        "regions": [
+          "east-asia",
+          "china"
+        ],
+        "languagePrompt": {
+          "message": "Daozang import is available as a plugin. Open Tools → Plugins to enable “Daozang import”.",
+          "documentLanguages": [
+            "zh-hant",
+            "zh-hans",
+            "lzh"
+          ]
+        },
+        "entry": {
+          "kind": "hybrid",
+          "module": "dist/register.mjs",
+          "python": {
+            "module": "daozang_import.ljb_bridge",
+            "runtime": "system",
+            "runtimePath": "python"
+          }
+        },
+        "contributions": {
+          "fileMenu": [
+            {
+              "id": "import-daozang",
+              "label": "Import from Daozang…",
+              "action": "daozang-import.open"
+            }
+          ]
+        },
+        "bundled": [
+          "dist/register.mjs",
+          "src/register.ts",
+          "python",
+          "data/corpus",
+          "data/metadata"
+        ]
+      },
+      "fileName": "ljb-plugin-daozang-import-0.1.0.tar.gz",
+      "bytes": 37999324,
+      "sha256": "4339cd28162fd2d85d4e5577e4c32fc111cdb857b29aee452410bda5ec28719b"
+    },
+    {
+      "id": "kanripo-import",
+      "name": "Kanripo import",
+      "version": "0.1.0",
+      "description": "Clone Kanseki Repository (Kanripo) works and convert each juan to project TEI.",
+      "author": "Daniel Patrick Morgan",
+      "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-kanripo-import",
+      "license": "GPL-2.0",
+      "languages": [
+        "zh-hant",
+        "zh-hans",
+        "lzh"
+      ],
+      "regions": [
+        "east-asia",
+        "china"
+      ],
+      "manifest": {
+        "manifestVersion": "1.0.0",
+        "id": "kanripo-import",
+        "name": "Kanripo import",
+        "version": "0.1.0",
+        "description": "Clone Kanseki Repository (Kanripo) works and convert each juan to project TEI.",
+        "author": "Daniel Patrick Morgan",
+        "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-kanripo-import",
+        "license": "GPL-2.0",
+        "ljb": {
+          "minVersion": "0.1.0"
+        },
+        "languages": [
+          "zh-hant",
+          "zh-hans",
+          "lzh"
+        ],
+        "regions": [
+          "east-asia",
+          "china"
+        ],
+        "languagePrompt": {
+          "message": "Kanripo import is available as a plugin. Open Tools → Plugins to enable “Kanripo import”.",
+          "documentLanguages": [
+            "zh-hant",
+            "zh-hans",
+            "lzh"
+          ]
+        },
+        "entry": {
+          "kind": "hybrid",
+          "module": "dist/register.mjs",
+          "python": {
+            "module": "kanripo_import.ljb_bridge",
+            "runtime": "system",
+            "runtimePath": "python"
+          }
+        },
+        "contributions": {
+          "fileMenu": [
+            {
+              "id": "import-kanripo",
+              "label": "Import from Kanripo…",
+              "action": "kanripo-import.open"
+            }
+          ],
+          "toolsMenu": [
+            {
+              "id": "punctuate-kanripo",
+              "label": "Segment and punctuate…",
+              "action": "kanripo-import.punctuate"
+            },
+            {
+              "id": "ai-punctuate-kanripo",
+              "label": "AI punctuate selection…",
+              "action": "kanripo-import.ai-punctuate"
+            },
+            {
+              "id": "purge-punct-kanripo",
+              "label": "Purge punctuation…",
+              "action": "kanripo-import.purge-punct"
+            },
+            {
+              "id": "reflow-paragraphs-kanripo",
+              "label": "Reflow paragraphs…",
+              "action": "kanripo-import.reflow-paragraphs"
+            }
+          ]
+        },
+        "bundled": [
+          "dist/register.mjs",
+          "src/register.ts",
+          "python",
+          "data/krp_works.json",
+          "data/gaiji",
+          "data/normalize",
+          "data/concordance",
+          "data/metadata/krp_works_by_id.json",
+          "data/metadata/krp_wikidata_by_kr_id.json",
+          "data/metadata/manifest.json"
+        ]
+      },
+      "fileName": "ljb-plugin-kanripo-import-0.1.0.tar.gz",
+      "bytes": 6502377,
+      "sha256": "72ff02ba9bd8bcc3fb8f3a20bdd203de0d359f1023e521910e22810aa28ad8e2"
     },
     {
       "id": "norbert",
@@ -303,8 +482,8 @@
         ]
       },
       "fileName": "ljb-plugin-norbert-0.1.0.tar.gz",
-      "bytes": 568466,
-      "sha256": "505ecf8c9f700a24f7041ce7c8458720bda263e43eac54bf1e11afc429c45634"
+      "bytes": 412979,
+      "sha256": "8e29c974783cdcbbfbb8b328b215a80b279762d38b03a0ef107a5bfc40484cf9"
     }
   ]
 }

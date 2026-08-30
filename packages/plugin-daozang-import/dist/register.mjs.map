@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/register.ts"],
+  "sourcesContent": ["/**\n * Daozang import plugin entry. UI lives in the LJB host webpack bundle.\n */\n\n/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */\n\nconst HOST_UI_MODULE = 'daozang-import-ui';\n\n/**\n * @param {PluginRegisterContext} context\n */\nexport async function register(context) {\n  context.log('loading Daozang import UI from host');\n  const ui = await context.loadHostModule(HOST_UI_MODULE);\n  if (typeof ui.registerDaozangImportUi !== 'function') {\n    throw new Error(`${HOST_UI_MODULE} is missing registerDaozangImportUi`);\n  }\n  ui.registerDaozangImportUi(context);\n}\n"],
+  "mappings": ";AAMA,IAAM,iBAAiB;AAKvB,eAAsB,SAAS,SAAS;AACtC,UAAQ,IAAI,qCAAqC;AACjD,QAAM,KAAK,MAAM,QAAQ,eAAe,cAAc;AACtD,MAAI,OAAO,GAAG,4BAA4B,YAAY;AACpD,UAAM,IAAI,MAAM,GAAG,cAAc,qCAAqC;AAAA,EACxE;AACA,KAAG,wBAAwB,OAAO;AACpC;",
+  "names": []
+}

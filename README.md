@@ -12,6 +12,8 @@ plugins/
     plugin-sdk/             # validate manifests
     plugin-cjk-dates/       # East Asian dates (Sanmiao)
     plugin-norbert/         # Chinese prosopography
+    plugin-kanripo-import/  # Kanripo clone → TEI, gaiji, parallel punctuation
+    plugin-daozang-import/  # Fang Tongzi Daozang corpus import
 ```
 
 Each plugin folder contains **`plugin.manifest.json`** — the contract the LJB host reads at install time.
@@ -19,20 +21,33 @@ Each plugin folder contains **`plugin.manifest.json`** — the contract the LJB 
 ## Quick start
 
 ```bash
-npm run validate    # check all plugin.manifest.json files
-npm run release     # build GitHub Release archives and plugins-index.json
+npm run validate          # check all plugin.manifest.json files
+npm run release:prepare   # build dist + refresh metadata, verify bundled data
+npm run release           # prepare + smoke tests + archives + plugins-index.json
 ```
 
-## Plugins (planned)
+Maintainers refreshing large bundled assets (first time or after upstream changes):
+
+```bash
+npm run build:daozang-corpus -w @ljb/plugin-daozang-import   # if corpus not in tree
+npm run download:gaiji -w @ljb/plugin-kanripo-import         # if gaiji not in tree
+npm run release
+```
+
+## Plugins
 
 | Plugin | Id | For |
 |--------|-----|-----|
 | East Asian dates | `cjk-dates` | Premodern China, Japan, Korea — date tagging & disambiguation |
 | Norbert | `norbert` | Chinese entity tagging, contextual disambiguation, noble titles, Norbert authority pack |
+| Kanripo import | `kanripo-import` | Clone Kanseki Repository works, gaiji, parallel punctuation, SKQS metadata |
+| Daozang import | `daozang-import` | Bundled 方瞳子 Daozang corpus (~1,500 texts), search and TEI import |
+
+**Wikisource import** is built into the LJB desktop app (not this repo). Kanripo can use Wikisource as a parallel punctuation source when LJB is installed.
 
 ## Related repos
 
-- **lejeanbaptiste** — editor + plugin *host* (Tools panel, suggestion pipeline)
+- **lejeanbaptiste** — editor + plugin *host* (Tools panel, import dialogs, suggestion pipeline)
 - **authoritypacks** — compile Norbert/CBDB/Wikidata NDJSON packs; Norbert plugin references those releases
 
 ## Documentation
