@@ -129,9 +129,29 @@ class MuluDivTest(unittest.TestCase):
         )
         rep = downgrade.mulu_and_divs(body)
         self.assertEqual(rep["mulu_to_marker"], 1)
+        self.assertIsNone(body.find(f"{_CB}mulu"))
         ms = body.find(f"{_TEI}milestone")
         self.assertEqual(ms.get("unit"), "mulu")
-        self.assertEqual(ms.get("ana"), "cbeta-mulu-label:品一")
+
+    def test_nested_mulu_consumed_into_head(self):
+        body = _frag(
+            '<cb:div type="品">'
+            '<cb:mulu level="3" type="其他">1 攝摩騰</cb:mulu><head>攝摩騰一</head><p>x</p>'
+            '</cb:div>'
+        )
+        rep = downgrade.mulu_and_divs(body)
+        self.assertGreaterEqual(rep["mulu_consumed_into_head"], 1)
+        self.assertIsNone(body.find(f"{_CB}mulu"))
+        div = body.find(f"{_TEI}div")
+        self.assertEqual(div.find(f"{_TEI}head").text, "攝摩騰一")
+
+    def test_place_on_p_becomes_rend(self):
+        body = _frag('<p place="inline">續段。</p>')
+        rep = downgrade.apply_cross_family(body)
+        p = body.find(f"{_TEI}p")
+        self.assertIsNone(p.get("place"))
+        self.assertEqual(p.get("rend"), "inline")
+        self.assertGreaterEqual(rep["place_attrs_normalised"], 1)
 
 
 class StructuralTest(unittest.TestCase):
@@ -155,7 +175,7 @@ class StructuralTest(unittest.TestCase):
 
 class EndToEndTest(unittest.TestCase):
     def test_cross_family_leaves_no_cb_elements(self):
-        result = convert_cbeta_xml(FIXTURE, cross_family=True)
+        result = convert_cbeta_xml(FIXTURE, cross_family=True, split_unit="juan")
         body = result["juan"][0]["body_xml"]
         self.assertNotIn("<cb:", body)
         self.assertNotIn(' cb:type=', body)
@@ -167,7 +187,7 @@ class EndToEndTest(unittest.TestCase):
         self.assertGreaterEqual(rep["tt_to_seg"], 1)
 
     def test_cbeta_family_keeps_cb_but_downgrades_phonetics(self):
-        result = convert_cbeta_xml(FIXTURE, cross_family=False)
+        result = convert_cbeta_xml(FIXTURE, cross_family=False, split_unit="juan")
         body = result["juan"][0]["body_xml"]
         self.assertIn("<cb:div", body)
         self.assertIn("<cb:juan", body)

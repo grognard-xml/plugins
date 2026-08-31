@@ -77,6 +77,9 @@ def cli_main() -> None:
         path=str(payload.get("path") or "") or None,
         cache_root=croot,
         cross_family=bool(payload.get("cross_family", True)),
+        clean=bool(payload.get("clean", False)),
+        strip_lb=bool(payload.get("strip_lb", False)),
+        split_unit=str(payload.get("split_unit") or "mulu"),
     )
     _emit(result)
 

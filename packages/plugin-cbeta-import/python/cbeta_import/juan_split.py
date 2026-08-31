@@ -25,6 +25,7 @@ from pathlib import Path
 from lxml import etree
 
 from cbeta_import.constants import CB_NS, JUAN_MILESTONE_UNIT, TEI_NS
+from cbeta_import.xml_whitespace import collapse_tree_newlines, normalize_serialized_xml
 
 _TEI = f"{{{TEI_NS}}}"
 _CB = f"{{{CB_NS}}}"
@@ -218,8 +219,48 @@ def _drop(el: etree._Element) -> None:
         parent.remove(el)
 
 
+def _rupture_parent_at(pivot: etree._Element) -> None:
+    """Lift ``pivot`` and its following siblings out of a nested parent to ``body`` level."""
+    parent = pivot.getparent()
+    if parent is None or parent.tag == f"{_TEI}body":
+        return
+    grand = parent.getparent()
+    if grand is None:
+        return
+    children = list(parent)
+    try:
+        pivot_i = children.index(pivot)
+    except ValueError:
+        return
+    suffix = children[pivot_i:]
+    for el in suffix:
+        parent.remove(el)
+    insert_pos = list(grand).index(parent) + 1
+    for offset, el in enumerate(suffix):
+        grand.insert(insert_pos + offset, el)
+    if len(parent) == 0 and not (parent.text or "").strip() and not (parent.tail or "").strip():
+        grand.remove(parent)
+
+
+def promote_juan_milestones_to_body(body: etree._Element) -> int:
+    """Split nested ``<milestone unit="juan">`` boundaries up to top-level ``<body>`` children."""
+    promoted = 0
+    while True:
+        nested = [
+            m
+            for m in body.iter()
+            if _is_juan_milestone(m) and m.getparent() is not body
+        ]
+        if not nested:
+            break
+        _rupture_parent_at(nested[0])
+        promoted += 1
+    return promoted
+
+
 def split_body_into_juan(tree: etree._ElementTree | etree._Element) -> list[JuanSlice]:
     body = find_body(tree)
+    promote_juan_milestones_to_body(body)
     children = [c for c in body if isinstance(c.tag, str)]
 
     milestone_idx = [i for i, c in enumerate(children) if _is_juan_milestone(c)]
@@ -310,7 +351,8 @@ def serialize_juan_body(sl: JuanSlice) -> str:
         body.append(el)
     for el in sl.apparatus:
         text.append(el)  # already a <back> element
-    return etree.tostring(text, encoding="unicode")
+    collapse_tree_newlines(text)
+    return normalize_serialized_xml(etree.tostring(text, encoding="unicode"))
 
 
 def split_file(path: str | Path) -> list[JuanSlice]:

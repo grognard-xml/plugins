@@ -38,6 +38,8 @@ from cbeta_import.juan_split import (
     split_body_into_juan,
     stitch_cross_file_juan,
 )
+from cbeta_import.mulu_split import split_body_into_mulu
+from cbeta_import.reading import apply_reading_options
 
 _TEI = f"{{{TEI_NS}}}"
 _WORK_ID_RE = re.compile(r"^(?P<canon>[A-Z]{1,2})(?P<vol>[A-Za-z]?\d{2,3})n(?P<no>[A-Za-z]?\d{2,4}[A-Za-z]?)$")
@@ -153,7 +155,14 @@ def _unwrap_empty(el: etree._Element, *, keep_tail: bool = True) -> None:
     parent.remove(el)
 
 
-def transform_juan(sl: JuanSlice, char_map: dict[str, str], *, cross_family: bool) -> JuanResult:
+def transform_juan(
+    sl: JuanSlice,
+    char_map: dict[str, str],
+    *,
+    cross_family: bool,
+    clean: bool = False,
+    strip_lb: bool = False,
+) -> JuanResult:
     """Apply the decided in-place reductions to one juan slice."""
     holder = etree.Element(f"{_TEI}body")
     for el in sl.elements:
@@ -171,9 +180,14 @@ def transform_juan(sl: JuanSlice, char_map: dict[str, str], *, cross_family: boo
         for k, v in downgrade.apply_cross_family(holder).items():
             report[k] = v
 
+    if clean or strip_lb:
+        report.update(apply_reading_options(holder, clean=clean, strip_lb=strip_lb))
+
     sl.elements = list(holder)
 
-    if sl.apparatus:
+    if clean:
+        sl.apparatus = []
+    elif sl.apparatus:
         back = sl.apparatus[0]
         report["apparatus_apps"] = len(back.findall(f".//{_TEI}app"))
         gaiji.apply(back, char_map)
@@ -203,9 +217,20 @@ def convert_cbeta_xml(
     *,
     rel_path: str = "",
     cross_family: bool = True,
+    clean: bool = False,
+    strip_lb: bool = False,
+    split_unit: str = "mulu",
 ) -> dict[str, object]:
     """Split one CBETA XML file by juan and apply the reductions."""
-    return _convert([Path(path)], work_id="", cross_family=cross_family, cache_root=None)
+    return _convert(
+        [Path(path)],
+        work_id="",
+        cross_family=cross_family,
+        clean=clean,
+        strip_lb=strip_lb,
+        split_unit=split_unit,
+        cache_root=None,
+    )
 
 
 def convert_cbeta_work(
@@ -214,6 +239,9 @@ def convert_cbeta_work(
     path: str | None = None,
     cache_root: str | Path | None = None,
     cross_family: bool = True,
+    clean: bool = False,
+    strip_lb: bool = False,
+    split_unit: str = "mulu",
 ) -> dict[str, object]:
     """Entry point. Resolve a work id (or take an explicit file), concatenate a
     multi-file work's ``<body>`` in volume order, then split by juan (planning §5.7).
@@ -228,11 +256,38 @@ def convert_cbeta_work(
         files = [Path(path)]
     else:
         raise ValueError("convert_cbeta_work needs work_id or path")
-    return _convert(files, work_id=work_id or "", cross_family=cross_family, cache_root=croot)
+    return _convert(
+        files,
+        work_id=work_id or "",
+        cross_family=cross_family,
+        clean=clean,
+        strip_lb=strip_lb,
+        split_unit=split_unit,
+        cache_root=croot,
+    )
+
+
+def _split_work_body(
+    tree: etree._ElementTree, *, split_unit: str, warnings: list[str]
+) -> list[JuanSlice]:
+    unit = (split_unit or "mulu").lower()
+    if unit == "mulu":
+        slices = split_body_into_mulu(tree)
+        if slices:
+            return slices
+        warnings.append("no mulu section headings found; fell back to juan split")
+    return split_body_into_juan(tree)
 
 
 def _convert(
-    files: list[Path], *, work_id: str, cross_family: bool, cache_root: Path | None
+    files: list[Path],
+    *,
+    work_id: str,
+    cross_family: bool,
+    clean: bool = False,
+    strip_lb: bool = False,
+    split_unit: str = "mulu",
+    cache_root: Path | None,
 ) -> dict[str, object]:
     missing = [f for f in files if not f.is_file()]
     if missing:
@@ -283,11 +338,19 @@ def _convert(
             f"({', '.join(f.stem for f in files)}) before juan split"
         )
 
-    slices = split_body_into_juan(base_tree)
-    if len(files) > 1:
+    slices = _split_work_body(base_tree, split_unit=split_unit, warnings=result.warnings)
+    if split_unit.lower() == "juan" and len(files) > 1:
         result.warnings.extend(stitch_cross_file_juan(slices))
     attach_apparatus(slices, find_back(base_tree))
     for sl in slices:
-        result.juan.append(transform_juan(sl, char_map, cross_family=cross_family))
+        result.juan.append(
+            transform_juan(
+                sl,
+                char_map,
+                cross_family=cross_family,
+                clean=clean,
+                strip_lb=strip_lb,
+            )
+        )
         result.warnings.extend(sl.straddles)
     return result.to_dict()

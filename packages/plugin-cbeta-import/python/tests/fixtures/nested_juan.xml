@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Nested juan test</title></titleStmt>
+      <sourceDesc><bibl>test</bibl></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <milestone n="1" unit="juan"/>
+      <lb n="0001a01" ed="T"/><p xml:id="p0001a0101">卷一正文。</p>
+      <div type="other">
+        <p xml:id="p0001a0201">卷一結尾。</p>
+        <milestone n="2" unit="juan"/>
+        <lb n="0002a01" ed="T"/><p xml:id="p0002a0101">卷二正文。</p>
+      </div>
+    </body>
+    <back>
+      <cb:div type="apparatus"><head>校注</head>
+        <p><app from="#beg0001001" to="#end0001001"><lem wit="#wit.orig">一</lem></app></p>
+      </cb:div>
+    </back>
+  </text>
+</TEI>

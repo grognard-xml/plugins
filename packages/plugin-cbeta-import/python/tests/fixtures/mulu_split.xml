@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Mulu split test</title></titleStmt>
+      <sourceDesc><bibl>test</bibl></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <milestone n="1" unit="juan"/>
+      <lb n="0001a01" ed="T"/>
+      <cb:div type="品">
+        <cb:mulu level="1" type="品">第一品</cb:mulu><head>第一品</head>
+        <p xml:id="p0001a0101">品一正文。</p>
+        <cb:mulu level="2" type="其他">小節甲</cb:mulu><head>小節甲</head>
+        <p xml:id="p0001a0201">小節正文。</p><p xml:id="p0001a0202" place="inline">續段。</p>
+        <cb:mulu level="2" type="其他">小節乙</cb:mulu><head>小節乙</head>
+        <p xml:id="p0001a0301">第二小節。</p>
+      </cb:div>
+    </body>
+  </text>
+</TEI>

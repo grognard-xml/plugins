@@ -13,7 +13,7 @@ _XID = "{http://www.w3.org/XML/1998/namespace}id"
 
 class ApparatusPerJuanTest(unittest.TestCase):
     def setUp(self):
-        self.r = convert_cbeta_xml(FX / "minimal_cbeta.xml", cross_family=False)
+        self.r = convert_cbeta_xml(FX / "minimal_cbeta.xml", cross_family=False, split_unit="juan")
 
     def test_matching_juan_gets_back(self):
         j1 = self.r["juan"][0]
@@ -27,7 +27,7 @@ class ApparatusPerJuanTest(unittest.TestCase):
         self.assertNotIn("<back", j2["body_xml"])
 
     def test_cross_family_downgrades_back(self):
-        rx = convert_cbeta_xml(FX / "minimal_cbeta.xml", cross_family=True)
+        rx = convert_cbeta_xml(FX / "minimal_cbeta.xml", cross_family=True, split_unit="juan")
         b = rx["juan"][0]["body_xml"]
         self.assertIn("<back", b)
         self.assertNotIn("<cb:div", b)  # cb:div type="apparatus" → div
@@ -40,6 +40,7 @@ class MultiFileIdCollisionTest(unittest.TestCase):
             [FX / "mf_a.xml", FX / "mf_b.xml"],
             work_id="T0999",
             cross_family=False,
+            split_unit="juan",
             cache_root=None,
         )
 
@@ -84,6 +85,7 @@ class CrossFileStraddleTest(unittest.TestCase):
             [FX / "mf_a.xml", FX / "mf_straddle.xml"],
             work_id="T0999",
             cross_family=False,
+            split_unit="juan",
             cache_root=None,
         )
 

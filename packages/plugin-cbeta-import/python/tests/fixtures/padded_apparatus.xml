@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Padding test</title></titleStmt>
+      <sourceDesc><bibl>test</bibl></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <milestone n="1" unit="juan"/>
+      <lb n="0001a01" ed="T"/><p xml:id="p0001a0101">正<anchor xml:id="beg0001001"/>文<anchor xml:id="end0001001"/>。</p>
+    </body>
+    <back>
+      <cb:div type="apparatus">
+        <head>校注</head>
+        <p><app from="#beg0001001" to="#end0001001"><lem wit="#wit.orig">文</lem></app>
+
+
+</p>
+      </cb:div>
+    </back>
+  </text>
+</TEI>

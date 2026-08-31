@@ -31,7 +31,9 @@ class TestJuanSplit(unittest.TestCase):
 
 class TestTransform(unittest.TestCase):
     def setUp(self):
-        self.result = convert_cbeta_xml(FIXTURE, rel_path="T/T99/T99n9999.xml")
+        self.result = convert_cbeta_xml(
+            FIXTURE, rel_path="T/T99/T99n9999.xml", split_unit="juan"
+        )
 
     def test_work_id_parsed(self):
         self.assertEqual(self.result["work_id"], "minimal_cbeta")  # fixture stem

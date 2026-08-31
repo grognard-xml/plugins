@@ -145,8 +145,67 @@ def _content_mulu(m: etree._Element) -> bool:
     return bool((m.text and m.text.strip()) or m.get("label"))
 
 
+def _consume_mulu_into_structure(k: etree._Element, report: dict[str, int]) -> None:
+    """Turn one content ``cb:mulu`` into a ``<head>`` (or drop if redundant)."""
+    parent = k.getparent()
+    label = (k.text or "").strip() or (k.get("label") or "").strip()
+    nxt = k.getnext()
+    if nxt is not None and _local(nxt.tag) == "head":
+        if label and not (nxt.text or "").strip():
+            nxt.text = label
+        _splice(k, "", [])
+        report["mulu_consumed_into_head"] += 1
+        return
+    if parent is not None and parent.tag == f"{_TEI}div":
+        existing = parent.find(f"{_TEI}head")
+        if existing is not None:
+            if label and not (existing.text or "").strip():
+                existing.text = label
+            _splice(k, "", [])
+            report["mulu_consumed_into_head"] += 1
+            return
+        head = etree.Element(f"{_TEI}head")
+        parent.insert(parent.index(k), head)
+        if label:
+            head.text = label
+        t = k.get("type")
+        if t and t != "卷" and not parent.get("type"):
+            parent.set("type", _norm_type(t))
+        _splice(k, "", [])
+        report["mulu_consumed_into_head"] += 1
+        return
+    k.tag = f"{_TEI}milestone"
+    k.set("unit", "mulu")
+    if label:
+        k.set("ana", f"cbeta-mulu-label:{label}")
+    k.text = None
+    report["mulu_to_marker"] += 1
+
+
+def _normalize_place_attrs(body: etree._Element) -> int:
+    """TEI-ALL allows ``@place`` on ``<note>`` but not on ``<p>`` / ``<seg>``."""
+    n = 0
+    for el in body.iter():
+        if not isinstance(el.tag, str) or "place" not in el.attrib:
+            continue
+        loc = _local(el.tag)
+        if loc not in ("p", "seg"):
+            continue
+        place = el.attrib.pop("place")
+        rend = el.get("rend")
+        el.set("rend", f"{rend} {place}".strip() if rend else place)
+        n += 1
+    return n
+
+
 def mulu_and_divs(body: etree._Element) -> dict[str, int]:
-    report = {"cb_div_renamed": 0, "mulu_dropped": 0, "mulu_to_div": 0, "mulu_to_marker": 0}
+    report = {
+        "cb_div_renamed": 0,
+        "mulu_dropped": 0,
+        "mulu_to_div": 0,
+        "mulu_to_marker": 0,
+        "mulu_consumed_into_head": 0,
+    }
 
     for el in list(body.iter(f"{_CB}div")):
         el.tag = f"{_TEI}div"
@@ -155,15 +214,16 @@ def mulu_and_divs(body: etree._Element) -> dict[str, int]:
             el.set("type", _norm_type(t))
         report["cb_div_renamed"] += 1
 
-    # Empty 卷 mulu: redundant after the juan split (the info also lives on the
-    # <div type="juan"> + its <milestone unit="juan">), but `mulu` is not a TEI
-    # element. Keep it as a <milestone unit="mulu" type="卷"> for round-trip
-    # (§5.3) rather than dropping it outright.
     for k in list(body.iter(f"{_CB}mulu")):
         if k.get("type") == "卷" and not _content_mulu(k):
             k.tag = f"{_TEI}milestone"
             k.set("unit", "mulu")
             report["mulu_to_marker"] += 1
+
+    for k in list(body.iter(f"{_CB}mulu")):
+        if k.get("type") != "卷" and not _content_mulu(k):
+            _splice(k, "", [])
+            report["mulu_dropped"] += 1
 
     kids = [k for k in body if isinstance(k.tag, str)]
     has_div = any(_local(k.tag) == "div" for k in kids)
@@ -171,54 +231,44 @@ def mulu_and_divs(body: etree._Element) -> dict[str, int]:
         k for k in kids if k.tag == f"{_CB}mulu" and k.get("type") != "卷" and _content_mulu(k)
     ]
 
-    # drop hidden (empty, non-卷) mulu everywhere
+    if content_mulus and not has_div:
+        ordered = list(kids)
+        for k in ordered:
+            body.remove(k)
+        stack: list[tuple[int, etree._Element]] = [(0, body)]
+        for k in ordered:
+            if k.tag == f"{_CB}mulu":
+                if k.get("type") == "卷" or not _content_mulu(k):
+                    continue  # 卷 handled by the split; empty already dropped
+                lvl = int(k.get("level") or 1)
+                while len(stack) > 1 and stack[-1][0] >= lvl:
+                    stack.pop()
+                div = etree.SubElement(stack[-1][1], f"{_TEI}div")
+                if k.get("type") and k.get("type") != "卷":
+                    div.set("type", _norm_type(k.get("type")))
+                if k.get("n"):
+                    div.set("n", k.get("n"))
+                div.set("ana", "cbeta-mulu")
+                head_text = (k.text or "").strip() or k.get("label") or ""
+                if head_text:
+                    etree.SubElement(div, f"{_TEI}head").text = head_text
+                stack.append((lvl, div))
+                report["mulu_to_div"] += 1
+            else:
+                if k.tag == f"{_TEI}head":
+                    div = stack[-1][1]
+                    cur = div.find(f"{_TEI}head")
+                    if cur is not None:
+                        if not (cur.text or "").strip() and (k.text or "").strip():
+                            cur.text = k.text
+                        continue
+                stack[-1][1].append(k)
+        return report
+
     for k in list(body.iter(f"{_CB}mulu")):
-        if k.get("type") != "卷" and not _content_mulu(k):
-            _splice(k, "", [])
-            report["mulu_dropped"] += 1
-
-    if not content_mulus:
-        return report
-
-    if has_div:
-        # divs already carry the hierarchy — demote each content mulu to a marker
-        for k in list(body.iter(f"{_CB}mulu")):
-            if k.get("type") == "卷" or not _content_mulu(k):
-                continue
-            k.tag = f"{_TEI}milestone"
-            k.set("unit", "mulu")
-            label = (k.text or "").strip() or k.get("label") or ""
-            k.text = None
-            if label:
-                k.set("ana", f"cbeta-mulu-label:{label}")
-            report["mulu_to_marker"] += 1
-        return report
-
-    # no pre-existing div: build the nesting from the mulu level tree
-    ordered = list(kids)
-    for k in ordered:
-        body.remove(k)
-    stack: list[tuple[int, etree._Element]] = [(0, body)]
-    for k in ordered:
-        if k.tag == f"{_CB}mulu":
-            if k.get("type") == "卷" or not _content_mulu(k):
-                continue  # 卷 handled by the split; empty already dropped
-            lvl = int(k.get("level") or 1)
-            while len(stack) > 1 and stack[-1][0] >= lvl:
-                stack.pop()
-            div = etree.SubElement(stack[-1][1], f"{_TEI}div")
-            if k.get("type") and k.get("type") != "卷":
-                div.set("type", _norm_type(k.get("type")))
-            if k.get("n"):
-                div.set("n", k.get("n"))
-            div.set("ana", "cbeta-mulu")
-            head_text = (k.text or "").strip() or k.get("label") or ""
-            if head_text:
-                etree.SubElement(div, f"{_TEI}head").text = head_text
-            stack.append((lvl, div))
-            report["mulu_to_div"] += 1
-        else:
-            stack[-1][1].append(k)
+        if k.get("type") == "卷" or not _content_mulu(k):
+            continue
+        _consume_mulu_into_structure(k, report)
     return report
 
 
@@ -274,4 +324,5 @@ def apply_cross_family(body: etree._Element) -> dict[str, int]:
     report = {"tt_to_seg": translation_terms(body), "juan_blocks": juan_blocks(body)}
     report.update(mulu_and_divs(body))
     report["cb_attrs_normalised"] = structural(body)
+    report["place_attrs_normalised"] = _normalize_place_attrs(body)
     return report
