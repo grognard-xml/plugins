@@ -1,0 +1,10 @@
+# Synced on demand, never committed (hundreds of MB). See python/cbeta_import/_paths.py.
+/data/corpus/
+/data/glyphs/
+/data/cache/
+
+# esbuild output — rebuilt by `npm run build` / release:prepare before verify:bundled.
+/dist/
+
+# data/metadata/ and data/schema/ ARE committed (small placeholders from
+# build-cbeta-metadata.py; real content regenerated at build:metadata time).

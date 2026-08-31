@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<grammar xmlns="http://relaxng.org/ns/structure/1.0"
+         xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0"
+         ns="http://www.tei-c.org/ns/1.0"
+         datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
+  <!-- Schema generated from ODD source. TEI Edition: P5 (trimmed for tests). -->
+  <start>
+    <element name="doc">
+      <ref name="att.global.attributes"/>
+      <oneOrMore><ref name="tei_p"/></oneOrMore>
+    </element>
+  </start>
+
+  <define name="tei_p">
+    <element name="p">
+      <zeroOrMore>
+        <choice>
+          <text/>
+          <ref name="tei_model.gLike"/>
+          <ref name="tei_model.phrase"/>
+          <ref name="tei_model.global"/>
+        </choice>
+      </zeroOrMore>
+      <ref name="att.global.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_macro.phraseSeq">
+    <zeroOrMore>
+      <choice>
+        <text/>
+        <ref name="tei_model.gLike"/>
+        <ref name="tei_model.phrase"/>
+        <ref name="tei_model.global"/>
+      </choice>
+    </zeroOrMore>
+  </define>
+
+  <define name="tei_model.gLike"><ref name="tei_g"/></define>
+  <define name="tei_model.global"><choice><ref name="tei_lb"/><ref name="tei_byline"/></choice></define>
+
+  <define name="tei_model.phrase">
+    <choice>
+      <ref name="tei_hi"/>
+    </choice>
+  </define>
+
+  <define name="tei_g"><element name="g"><text/><ref name="att.global.attributes"/>
+    <optional><attribute name="ref"><text/></attribute></optional></element></define>
+  <define name="tei_lb"><element name="lb"><ref name="att.global.attributes"/>
+    <optional><attribute name="ed"><text/></attribute></optional><empty/></element></define>
+  <define name="tei_hi"><element name="hi"><ref name="tei_macro.phraseSeq"/><ref name="att.global.attributes"/></element></define>
+
+  <define name="tei_persName">
+    <element name="persName">
+      <ref name="tei_macro.phraseSeq"/>
+      <ref name="att.global.attributes"/>
+      <ref name="att.personal.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_placeName">
+    <element name="placeName">
+      <ref name="tei_macro.phraseSeq"/>
+      <ref name="att.global.attributes"/>
+      <ref name="att.naming.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_roleName">
+    <element name="roleName">
+      <ref name="tei_macro.phraseSeq"/>
+      <ref name="att.global.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_orgName"><element name="orgName"><ref name="tei_macro.phraseSeq"/><ref name="att.global.attributes"/></element></define>
+  <define name="tei_name"><element name="name"><ref name="tei_macro.phraseSeq"/><ref name="att.global.attributes"/><ref name="att.naming.attributes"/></element></define>
+
+  <define name="tei_title">
+    <element name="title">
+      <ref name="tei_macro.phraseSeq"/>
+      <ref name="att.global.attributes"/>
+      <ref name="att.canonical.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_byline">
+    <element name="byline">
+      <ref name="tei_macro.phraseSeq"/>
+      <ref name="att.global.attributes"/>
+    </element>
+  </define>
+
+  <define name="tei_date">
+    <element name="date">
+      <zeroOrMore>
+        <choice>
+          <text/>
+          <ref name="tei_model.gLike"/>
+          <ref name="tei_model.phrase"/>
+          <ref name="tei_model.global"/>
+        </choice>
+      </zeroOrMore>
+      <ref name="att.global.attributes"/>
+    </element>
+  </define>
+
+  <define name="att.global.attributes">
+    <optional><attribute name="xml:id"><data type="ID"/></attribute></optional>
+    <optional><attribute name="n"><text/></attribute></optional>
+  </define>
+  <define name="att.canonical.attributes">
+    <ref name="att.canonical.attribute.ref"/>
+    <ref name="att.canonical.attribute.key"/>
+  </define>
+  <define name="att.canonical.attribute.ref">
+    <optional><attribute name="ref"><text/></attribute></optional>
+  </define>
+  <define name="att.canonical.attribute.key">
+    <optional><attribute name="key"><text/></attribute></optional>
+  </define>
+  <define name="att.naming.attributes">
+    <ref name="att.canonical.attributes"/>
+    <optional><attribute name="role"><text/></attribute></optional>
+  </define>
+  <define name="att.personal.attributes">
+    <optional><attribute name="full"><text/></attribute></optional>
+  </define>
+</grammar>

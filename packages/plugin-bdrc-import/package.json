@@ -1,0 +1,16 @@
+{
+  "name": "@ljb/plugin-bdrc-import",
+  "version": "0.1.0",
+  "private": true,
+  "description": "BDRC etext volume → project TEI plugin for LJB (browser-extension driven, live PDI fetch)",
+  "ljbPlugin": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}

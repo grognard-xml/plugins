@@ -1,0 +1,20 @@
+{
+  "name": "@ljb/plugin-cbeta-import",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CBETA (漢文電子佛典) clone-and-convert plugin for LJB — split by juan, translate CBETA P5 to project TEI.",
+  "ljbPlugin": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "build:metadata": "python3 scripts/build-cbeta-metadata.py",
+    "build:corpus-data": "node scripts/build-corpus-data.mjs",
+    "smoke": "node scripts/smoke-test.mjs",
+    "test": "python3 -m unittest discover -s python/tests -p 'test_*.py' -q",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "manifestVersion": "1.0.0",
+  "id": "cbeta-import",
+  "name": "CBETA import",
+  "version": "0.1.0",
+  "description": "Clone CBETA (漢文電子佛典) works from GitHub, split each work by juan, and convert CBETA P5 to project TEI. The xml-p5 corpus is installed with the plugin (cloned from GitHub on first install if not bundled).",
+  "author": "Daniel Patrick Morgan",
+  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-cbeta-import",
+  "license": "GPL-2.0",
+  "ljb": {
+    "minVersion": "0.1.0"
+  },
+  "languages": ["zh-hant", "zh-hans", "lzh", "sa", "pi"],
+  "regions": ["east-asia", "china"],
+  "languagePrompt": {
+    "message": "CBETA import is available as a plugin. Open Tools → Plugins to enable “CBETA import”.",
+    "documentLanguages": ["zh-hant", "zh-hans", "lzh"]
+  },
+  "entry": {
+    "kind": "hybrid",
+    "module": "dist/register.mjs",
+    "python": {
+      "module": "cbeta_import.ljb_bridge",
+      "runtime": "system",
+      "runtimePath": "python"
+    }
+  },
+  "contributions": {
+    "fileMenu": [
+      {
+        "id": "import-cbeta",
+        "label": "Import from CBETA…",
+        "action": "cbeta-import.open"
+      }
+    ]
+  },
+  "bundled": [
+    "dist/register.mjs",
+    "src/register.ts",
+    "python",
+    "data/metadata",
+    "data/schema"
+  ]
+}

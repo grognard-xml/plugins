@@ -1,0 +1,32 @@
+{
+  "manifestVersion": "1.0.0",
+  "id": "bdrc-import",
+  "name": "BDRC import",
+  "version": "0.1.0",
+  "description": "Import a BDRC (Buddhist Digital Resource Center) etext volume from the BUDA reader into project TEI. Live fetch from the Public Data Interface; no bundled corpus.",
+  "author": "Daniel Patrick Morgan",
+  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-bdrc-import",
+  "license": "GPL-2.0",
+  "ljb": {
+    "minVersion": "0.1.0"
+  },
+  "languages": ["bo"],
+  "languagePrompt": {
+    "message": "BDRC import is available as a plugin. Open Tools → Plugins to enable “BDRC import”.",
+    "documentLanguages": ["bo"]
+  },
+  "entry": {
+    "kind": "javascript",
+    "module": "dist/register.mjs"
+  },
+  "contributions": {
+    "fileMenu": [
+      {
+        "id": "import-bdrc",
+        "label": "Import from BDRC…",
+        "action": "bdrc-import.open"
+      }
+    ]
+  },
+  "bundled": ["dist/register.mjs", "src/register.ts"]
+}

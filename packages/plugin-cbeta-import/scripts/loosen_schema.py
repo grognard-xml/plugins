@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+"""Apply the LJB §4 loosenings to CBETA's published RelaxNG (+ Schematron).
+
+CBETA ships one flat, ODD-generated grammar (`cbeta-p5.rng`, `tei_`-prefixed
+pattern names, ~570 `<define>`s) with 3 embedded Schematron rules. We widen it
+just enough to hold our tagging apparatus — no new TEI elements, only:
+
+1. `@ref` / `@key` permitted on `<title>`, `<author>`, `<byline>` and every NE
+   element (per-define, guarded so we never double-declare an attribute);
+2. the LJB NE inventory (`persName`, `placeName`, `orgName`, `roleName`, `name`,
+   `title`, `date`, `nobleTitle`) added to `tei_model.phrase` — so it may occur
+   in `<p>`, `<l>`, `<head>`, `<seg>`, `<note>` …;
+3. `<date>` extended with the Sanmiao parse children + resolution attributes
+   (leaf-writer/docs/ljb-tei-extensions.md; kept in sync with
+   apps/desktop/src/sanmiaoSchemaMerge.ts).
+
+Interleaving (§4.3 — `<lb/>`/`<pb/>`/`<anchor/>`/`<g>` inside NE elements) is
+already satisfied: the NE defines use `tei_macro.phraseSeq`, which pulls
+`tei_model.global` (milestones/anchor) and `tei_model.gLike` (`g`).
+
+Schematron: CBETA's only rules require `@spanTo` on `addSpan`/`damageSpan`/
+`delSpan` — nothing touches inserted markup — so the `.sch` passes through
+unchanged.
+
+Usage:  loosen_schema.py IN.rng OUT.rng [IN.sch OUT.sch]
+"""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from lxml import etree
+
+RNG = "http://relaxng.org/ns/structure/1.0"
+A = "http://relaxng.org/ns/compatibility/annotations/1.0"
+_R = f"{{{RNG}}}"
+_A = f"{{{A}}}"
+
+MARKER = "ljb-cbeta-loosen v1"
+
+# Kept in sync with sanmiaoSchemaMerge.ts (SANMIAO_DATE_PARTS @ v14).
+SANMIAO_DATE_PARTS = (
+    "dyn", "ruler", "era", "year", "month", "int", "day", "gz", "sexYear",
+    "suffix", "lp", "nmdgz", "lp_filler", "filler", "season", "gy",
+)
+SANMIAO_RES_ATTRS = (
+    ("dyn_id", "integer"), ("ruler_id", "integer"), ("era_id", "integer"),
+    ("cal_stream", "integer"), ("ind_year", "integer"), ("year", "integer"),
+    ("sex_year", "integer"), ("month", "integer"), ("intercalary", "integer"),
+    ("day", "integer"), ("gz", "integer"), ("nmd_gz", "integer"),
+    ("lp", "integer"), ("jdn", "decimal"), ("jdnEnd", "decimal"), ("dila_id", None),
+)
+
+# tei_model.phrase gets these; guarded by "does the target define exist".
+NE_PHRASE_REFS = (
+    "tei_persName", "tei_placeName", "tei_orgName", "tei_roleName",
+    "tei_name", "tei_title", "tei_date", "ljb_nobleTitle",
+)
+# authority @ref/@key targets (per-define, guarded against an existing decl)
+AUTHORITY_TARGETS = (
+    "tei_title", "tei_author", "tei_byline", "tei_persName", "tei_placeName",
+    "tei_orgName", "tei_roleName", "tei_name", "tei_date", "ljb_nobleTitle",
+)
+
+
+def _defines(root: etree._Element) -> dict[str, etree._Element]:
+    return {d.get("name"): d for d in root.iter(f"{_R}define")}
+
+
+def _attr_class_providers(defs: dict[str, etree._Element], attr: str) -> set[str]:
+    """`att.*` defines that (transitively) contribute an attribute named ``attr``."""
+    seed = {
+        n
+        for n, d in defs.items()
+        if n.startswith("att.")
+        and any(a.get("name") == attr for a in d.iter(f"{_R}attribute"))
+    }
+    changed = True
+    while changed:
+        changed = False
+        for n, d in defs.items():
+            if n in seed or not n.startswith("att."):
+                continue
+            if any(x.get("name") in seed for x in d.iter(f"{_R}ref")):
+                seed.add(n)
+                changed = True
+    return seed
+
+
+def _element_att_classes(define: etree._Element) -> set[str]:
+    el = define.find(f"{_R}element")
+    if el is None:
+        return set()
+    return {
+        r.get("name")
+        for r in el.findall(f"{_R}ref")
+        if (r.get("name") or "").startswith("att.")
+    }
+
+
+def _el(tag: str, **attrs: str) -> etree._Element:
+    e = etree.Element(f"{_R}{tag}")
+    for k, v in attrs.items():
+        e.set(k, v)
+    return e
+
+
+def _has_direct_attr(define: etree._Element, name: str) -> bool:
+    el = define.find(f"{_R}element")
+    scope = el if el is not None else define
+    return any(a.get("name") == name for a in scope.iter(f"{_R}attribute"))
+
+
+def _optional_attr(name: str, datatype: str | None = None) -> etree._Element:
+    opt = _el("optional")
+    attr = etree.SubElement(opt, f"{_R}attribute", name=name)
+    if datatype:
+        etree.SubElement(attr, f"{_R}data", type=datatype)
+    else:
+        etree.SubElement(attr, f"{_R}text")
+    return opt
+
+
+# --------------------------------------------------------------------------- #
+
+
+def _add_authority_attrs(defs: dict[str, etree._Element]) -> int:
+    prov = {a: _attr_class_providers(defs, a) for a in ("ref", "key")}
+    n = 0
+    for name in AUTHORITY_TARGETS:
+        d = defs.get(name)
+        if d is None:
+            continue
+        el = d.find(f"{_R}element")
+        if el is None:
+            continue
+        att_classes = _element_att_classes(d)
+        for attr in ("ref", "key"):
+            if _has_direct_attr(d, attr) or (att_classes & prov[attr]):
+                continue
+            el.append(_optional_attr(attr))
+            n += 1
+    return n
+
+
+def _expand_model_phrase(defs: dict[str, etree._Element]) -> int:
+    d = defs.get("tei_model.phrase")
+    if d is None:
+        return 0
+    choice = d.find(f"{_R}choice")
+    if choice is None:
+        return 0
+    present = {r.get("name") for r in choice.findall(f"{_R}ref")}
+    n = 0
+    for ref in NE_PHRASE_REFS:
+        if ref in present:
+            continue
+        if ref.startswith("tei_") and ref not in defs:
+            continue
+        choice.append(_el("ref", name=ref))
+        n += 1
+    return n
+
+
+def _extend_date(defs: dict[str, etree._Element]) -> int:
+    d = defs.get("tei_date")
+    if d is None:
+        return 0
+    el = d.find(f"{_R}element")
+    if el is None:
+        return 0
+    n = 0
+    inner_choice = el.find(f"{_R}zeroOrMore/{_R}choice")
+    if inner_choice is not None and not any(
+        r.get("name") == "ljb_sanmiao_date_parts" for r in inner_choice.findall(f"{_R}ref")
+    ):
+        inner_choice.append(_el("ref", name="ljb_sanmiao_date_parts"))
+        n += 1
+    if not any(r.get("name") == "ljb_sanmiao_att_resolution" for r in el.findall(f"{_R}ref")):
+        el.append(_el("ref", name="ljb_sanmiao_att_resolution"))
+        n += 1
+    return n
+
+
+def _append_ljb_defines(root: etree._Element, defs: dict[str, etree._Element]) -> None:
+    if "ljb_nobleTitle" not in defs:
+        d = _el("define", name="ljb_nobleTitle")
+        el = etree.SubElement(d, f"{_R}element", name="nobleTitle")
+        doc = etree.SubElement(el, f"{_A}documentation")
+        doc.text = "LJB: fief/place + rank grouping (ljb-tei-extensions.md)."
+        one = etree.SubElement(el, f"{_R}oneOrMore")
+        ch = etree.SubElement(one, f"{_R}choice")
+        etree.SubElement(ch, f"{_R}text")
+        for ref in ("tei_model.global", "tei_placeName", "tei_roleName", "tei_persName"):
+            if ref in defs or not ref.startswith("tei_"):
+                etree.SubElement(ch, f"{_R}ref", name=ref)
+        etree.SubElement(el, f"{_R}ref", name="att.global.attributes")
+        el.append(_optional_attr("ref"))
+        el.append(_optional_attr("key"))
+        root.append(d)
+
+    for part in SANMIAO_DATE_PARTS:
+        name = f"ljb_sanmiao_{part}"
+        if name in defs:
+            continue
+        d = _el("define", name=name)
+        el = etree.SubElement(d, f"{_R}element", name=part)
+        zom = etree.SubElement(el, f"{_R}zeroOrMore")
+        ch = etree.SubElement(zom, f"{_R}choice")
+        etree.SubElement(ch, f"{_R}text")
+        etree.SubElement(ch, f"{_R}ref", name="tei_model.global")
+        etree.SubElement(el, f"{_R}ref", name="att.global.attributes")
+        root.append(d)
+
+    if "ljb_sanmiao_date_parts" not in defs:
+        d = _el("define", name="ljb_sanmiao_date_parts")
+        ch = etree.SubElement(d, f"{_R}choice")
+        for part in SANMIAO_DATE_PARTS:
+            etree.SubElement(ch, f"{_R}ref", name=f"ljb_sanmiao_{part}")
+        root.append(d)
+
+    if "ljb_sanmiao_att_resolution" not in defs:
+        d = _el("define", name="ljb_sanmiao_att_resolution")
+        for attr, dt in SANMIAO_RES_ATTRS:
+            d.append(_optional_attr(attr, dt))
+        root.append(d)
+
+
+def loosen_rng(text: str) -> str:
+    root = etree.fromstring(text.encode("utf-8"))
+    if MARKER in text:
+        return text  # idempotent
+
+    defs = _defines(root)
+    report = {
+        "authority_attrs": _add_authority_attrs(defs),
+        "phrase_refs": _expand_model_phrase(defs),
+        "date_extended": _extend_date(defs),
+    }
+    _append_ljb_defines(root, defs)
+
+    doc = etree.Element(f"{_A}documentation")
+    doc.text = (
+        f"Le Jean-Baptiste: CBETA P5 + LJB tagging loosenings ({MARKER}) — "
+        f"{report}"
+    )
+    root.insert(0, doc)
+
+    out = etree.tostring(root, xml_declaration=True, encoding="UTF-8").decode("utf-8")
+    sys.stderr.write(f"[loosen_schema] rng: {report}\n")
+    return out
+
+
+def loosen_sch(text: str) -> str:
+    # CBETA's Schematron only requires @spanTo on addSpan/damageSpan/delSpan.
+    sys.stderr.write("[loosen_schema] sch: no rule affects inserted markup — passthrough\n")
+    return text
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) not in (2, 4):
+        sys.stderr.write(__doc__ or "")
+        return 2
+    in_rng, out_rng = Path(argv[0]), Path(argv[1])
+    Path(out_rng).write_text(loosen_rng(in_rng.read_text("utf-8")), "utf-8")
+    if len(argv) == 4:
+        in_sch, out_sch = Path(argv[2]), Path(argv[3])
+        Path(out_sch).write_text(loosen_sch(in_sch.read_text("utf-8")), "utf-8")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main(sys.argv[1:]))

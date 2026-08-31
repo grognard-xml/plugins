@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../src/register.ts"],
+  "sourcesContent": ["/**\n * BDRC import plugin entry. UI + fetch/emit pipeline live in the LJB host bundle;\n * this package only carries the manifest and this stub.\n *\n * Design: leaf-writer/docs/bdrc-import-planning.md\n */\n\n/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */\n\nconst HOST_UI_MODULE = 'bdrc-import-ui';\n\n/**\n * @param {PluginRegisterContext} context\n */\nexport async function register(context) {\n  context.log('loading BDRC import UI from host');\n  const ui = await context.loadHostModule(HOST_UI_MODULE);\n  if (typeof ui.registerBdrcImportUi !== 'function') {\n    throw new Error(`${HOST_UI_MODULE} is missing registerBdrcImportUi`);\n  }\n  ui.registerBdrcImportUi(context);\n}\n"],
+  "mappings": ";AASA,IAAM,iBAAiB;AAKvB,eAAsB,SAAS,SAAS;AACtC,UAAQ,IAAI,kCAAkC;AAC9C,QAAM,KAAK,MAAM,QAAQ,eAAe,cAAc;AACtD,MAAI,OAAO,GAAG,yBAAyB,YAAY;AACjD,UAAM,IAAI,MAAM,GAAG,cAAc,kCAAkC;AAAA,EACrE;AACA,KAAG,qBAAqB,OAAO;AACjC;",
+  "names": []
+}

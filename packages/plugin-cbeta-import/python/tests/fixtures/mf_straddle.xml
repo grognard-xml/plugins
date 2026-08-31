@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader><fileDesc><titleStmt><title>Taisho Tripitaka Vol. 9, No. 0999 測試跨冊經</title>
+  <author>唐 玄奘譯</author></titleStmt>
+  <sourceDesc><bibl>Taisho Tripitaka Vol. 9, No. 0999</bibl></sourceDesc></fileDesc></teiHeader>
+  <text><body>
+    <milestone n="1" unit="juan"/>
+    <lb n="0003a01" ed="T"/><cb:juan n="001" fun="open"><cb:jhead>測試跨冊經卷第1</cb:jhead></cb:juan>
+    <p xml:id="p1b">卷一下半。<anchor xml:id="beg_1"/>祇樹<anchor xml:id="end_1"/>給孤獨園。</p>
+    <cb:juan n="001" fun="close"><cb:jhead>測試跨冊經卷第1</cb:jhead></cb:juan>
+    <milestone n="2" unit="juan"/>
+    <lb n="0003b01" ed="T"/><cb:juan n="002" fun="open"><cb:jhead>測試跨冊經卷第2</cb:jhead></cb:juan>
+    <p xml:id="p2s">卷二內容。</p>
+  </body>
+  <back><cb:div type="apparatus"><head>校注</head>
+    <p><app from="#beg_1" to="#end_1"><lem wit="#wit.orig">祇樹</lem><rdg wit="#wit1">祇</rdg></app></p>
+  </cb:div></back>
+  </text>
+</TEI>
