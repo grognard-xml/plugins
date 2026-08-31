@@ -91,6 +91,16 @@ class MuluDivTest(unittest.TestCase):
         self.assertEqual(rep["mulu_dropped"], 1)
         self.assertEqual([c.tag for c in body], [f"{_TEI}p"])
 
+    def test_empty_juan_mulu_becomes_milestone(self):
+        # <cb:mulu type="卷"> survives the juan split into the body; it is not a
+        # TEI element, so keep it as <milestone unit="mulu"> for round-trip.
+        body = _frag('<cb:mulu type="卷" n="1"/><p>x</p>')
+        rep = downgrade.mulu_and_divs(body)
+        self.assertEqual(rep["mulu_to_marker"], 1)
+        self.assertIsNone(body.find(f"{_CB}mulu"))
+        ms = body.find(f"{_TEI}milestone")
+        self.assertEqual((ms.get("unit"), ms.get("type"), ms.get("n")), ("mulu", "卷", "1"))
+
     def test_bare_mulu_builds_div_nesting(self):
         body = _frag(
             '<p>前言</p>'
@@ -136,6 +146,11 @@ class StructuralTest(unittest.TestCase):
         p = body.find(f"{_TEI}p")
         self.assertEqual(p.get("ana"), "verse")
         self.assertNotIn(f"{_CB}word-count", p.attrib)
+
+    def test_cb_note_key_dropped(self):
+        body = _frag('<note cb:note_key="B07.0015a03.07" type="add">x</note>')
+        downgrade.structural(body)
+        self.assertNotIn(f"{_CB}note_key", body[0].attrib)
 
 
 class EndToEndTest(unittest.TestCase):

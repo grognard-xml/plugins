@@ -116,6 +116,7 @@ class WorkMeta:
     category: str = ""
     juan_count: int = 0
     work_qid: str = ""
+    work_dila_id: str = ""  # DILA catalog-authority id (CA…), when no Wikidata QID
     contributors: list[Contributor] = field(default_factory=list)
     byline_raw: str = ""
 
@@ -128,6 +129,7 @@ class WorkMeta:
             "taisho_vol": self.taisho_vol,
             "taisho_no": self.taisho_no,
             "work_qid": self.work_qid,
+            "work_dila_id": self.work_dila_id,
             "authorship": [
                 {k: v for k, v in asdict(c).items() if v} for c in self.contributors
             ],
@@ -243,6 +245,7 @@ def resolve_work_meta(
     meta.dynasty = info.get("dynasty") or meta.dynasty
     meta.category = info.get("category") or meta.category
     meta.work_qid = info.get("work_qid") or meta.work_qid
+    meta.work_dila_id = info.get("work_dila_id") or meta.work_dila_id
     if info.get("juan_count"):
         meta.juan_count = int(info["juan_count"])
 
@@ -277,6 +280,16 @@ def _authority_ref(c: Contributor) -> str:
     return ""
 
 
+def _work_ref(meta: WorkMeta) -> str:
+    """Best authority ref for the work title: Wikidata QID if present, else the
+    DILA catalog-authority id (``DILA:CA…``), else empty (re-checkable later)."""
+    if meta.work_qid:
+        return f"https://www.wikidata.org/entity/{meta.work_qid}"
+    if meta.work_dila_id:
+        return f"DILA:{meta.work_dila_id}"
+    return ""
+
+
 def build_tei_header(
     meta: WorkMeta, *, juan_n: str = "", source_files: list[str] | None = None, git_commit: str = ""
 ) -> etree._Element:
@@ -284,9 +297,13 @@ def build_tei_header(
     H = etree.Element(f"{_TEI}teiHeader")
     file_desc = etree.SubElement(H, f"{_TEI}fileDesc")
 
+    work_ref = _work_ref(meta)
+
     title_stmt = etree.SubElement(file_desc, f"{_TEI}titleStmt")
     t = etree.SubElement(title_stmt, f"{_TEI}title")
     t.text = meta.title + (f" 卷{juan_n}" if juan_n else "")
+    if work_ref:
+        t.set("ref", work_ref)
     for c in meta.contributors:
         a = etree.SubElement(title_stmt, f"{_TEI}author")
         if c.role:
@@ -309,9 +326,11 @@ def build_tei_header(
     monogr = etree.SubElement(bs, f"{_TEI}monogr")
     mt = etree.SubElement(monogr, f"{_TEI}title")
     mt.text = meta.title
-    if meta.work_qid:
-        mt.set("ref", f"https://www.wikidata.org/entity/{meta.work_qid}")
+    if work_ref:
+        mt.set("ref", work_ref)
     _idno(monogr, "CBETA", meta.work_id)
+    if meta.work_dila_id:
+        _idno(monogr, "DILA", meta.work_dila_id)
     if meta.taisho_vol and meta.taisho_no:
         _idno(monogr, "Taisho", f"{meta.taisho_vol}.{meta.taisho_no}")
     imprint = etree.SubElement(monogr, f"{_TEI}imprint")
@@ -319,13 +338,16 @@ def build_tei_header(
 
     if meta.dynasty or meta.category:
         prof = etree.SubElement(H, f"{_TEI}profileDesc")
-        creation = etree.SubElement(prof, f"{_TEI}creation")
         if meta.dynasty:
+            creation = etree.SubElement(prof, f"{_TEI}creation")
             etree.SubElement(creation, f"{_TEI}origDate").text = meta.dynasty
         if meta.category:
-            note = etree.SubElement(creation, f"{_TEI}note")
-            note.set("type", "category")
-            note.text = meta.category
+            # 部類 is a classification, not a note — put it in <textClass>
+            # (a <note> in <creation> trips some TEI-All customisations).
+            text_class = etree.SubElement(prof, f"{_TEI}textClass")
+            keywords = etree.SubElement(text_class, f"{_TEI}keywords")
+            keywords.set("scheme", "https://cbeta.org/format/#buleik")
+            etree.SubElement(keywords, f"{_TEI}term").text = meta.category
 
     rev = etree.SubElement(H, f"{_TEI}revisionDesc")
     change = etree.SubElement(rev, f"{_TEI}change")

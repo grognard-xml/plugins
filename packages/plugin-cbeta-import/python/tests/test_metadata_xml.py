@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -74,7 +75,17 @@ class WorkInfoEnrichmentTest(unittest.TestCase):
                                 "norbert_id": "4242",
                             }
                         ],
-                    }
+                    },
+                    "B9999": {
+                        "title": "測試補編經",
+                        "dynasty": "",
+                        "category": "新編部類",
+                        "juan_count": 1,
+                        "work_dila_id": "CA0006097",
+                        "contributors": [
+                            {"person_name": "法舫", "role": "translator", "dila_id": "A007860"}
+                        ],
+                    },
                 }
             ),
             "utf-8",
@@ -117,8 +128,30 @@ class WorkInfoEnrichmentTest(unittest.TestCase):
         self.assertIn('role="translator"', xml)
         self.assertIn("NORBERT:person-4242", xml)  # norbert wins over dila
         self.assertIn('type="CBETA"', xml)
-        self.assertIn("般若部", xml)
         self.assertIn("plugin cbeta-import", xml)
+        # QID work → title carries a Wikidata ref; 部類 lives in <textClass>/<term>
+        self.assertIn('ref="https://www.wikidata.org/entity/Q12345"', xml)
+        self.assertRegex(xml, r"term>般若部<")
+        self.assertRegex(xml, r"textClass>")
+
+    def test_build_header_category_not_in_creation_and_dila_work_ref(self):
+        tree = etree.parse(str(FIXTURE))
+        meta = metadata_xml.resolve_work_meta(tree, "B9999")
+        self.assertEqual(meta.work_dila_id, "CA0006097")
+        self.assertEqual(meta.work_qid, "")
+        xml = etree.tostring(
+            metadata_xml.build_tei_header(meta, juan_n="1", source_files=["B07n9999"]),
+            encoding="unicode",
+        )
+        # no Wikidata QID → the DILA catalog id is the work authority ref
+        self.assertIn('ref="DILA:CA0006097"', xml)
+        self.assertRegex(xml, r'idno type="DILA">CA0006097<')
+        # 部類 goes in <textClass>/<term>, and <creation> holds only <origDate>
+        # (a <note> child of <creation> is what tripped TEI-All validation).
+        self.assertRegex(xml, r"term>新編部類<")
+        creation = re.search(r"<[^>]*creation>(.*?)</[^>]*creation>", xml)
+        if creation:
+            self.assertNotIn("note", creation.group(1))
 
 
 if __name__ == "__main__":

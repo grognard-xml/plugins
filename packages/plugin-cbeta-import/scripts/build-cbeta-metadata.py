@@ -201,9 +201,13 @@ def build_work_info(
             "juan_count": int(entry.get("juans") or 0),
             "contributors": contribs,
         }
-        aid = entry.get("authorityID")
-        if aid and str(aid).startswith("Q"):
+        aid = str(entry.get("authorityID") or "").strip()
+        if aid.startswith("Q"):
             rec["work_qid"] = aid
+        elif aid:
+            # DILA catalog-authority id (CA…) — no Wikidata QID, but still a
+            # resolvable work authority; the header emits it as DILA:<id>.
+            rec["work_dila_id"] = aid
         out[wid] = rec
     return out
 

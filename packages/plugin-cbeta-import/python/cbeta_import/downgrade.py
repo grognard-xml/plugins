@@ -155,6 +155,16 @@ def mulu_and_divs(body: etree._Element) -> dict[str, int]:
             el.set("type", _norm_type(t))
         report["cb_div_renamed"] += 1
 
+    # Empty 卷 mulu: redundant after the juan split (the info also lives on the
+    # <div type="juan"> + its <milestone unit="juan">), but `mulu` is not a TEI
+    # element. Keep it as a <milestone unit="mulu" type="卷"> for round-trip
+    # (§5.3) rather than dropping it outright.
+    for k in list(body.iter(f"{_CB}mulu")):
+        if k.get("type") == "卷" and not _content_mulu(k):
+            k.tag = f"{_TEI}milestone"
+            k.set("unit", "mulu")
+            report["mulu_to_marker"] += 1
+
     kids = [k for k in body if isinstance(k.tag, str)]
     has_div = any(_local(k.tag) == "div" for k in kids)
     content_mulus = [
@@ -235,7 +245,14 @@ def structural(body: etree._Element) -> int:
         f"{_CB}type": "ana",
         f"{_CB}line": "n",
     }
-    drop = {f"{_CB}word-count", f"{_CB}provider", f"{_CB}behaviour", f"{_CB}cert", f"{_CB}id"}
+    drop = {
+        f"{_CB}word-count",
+        f"{_CB}provider",
+        f"{_CB}behaviour",
+        f"{_CB}cert",
+        f"{_CB}id",
+        f"{_CB}note_key",
+    }
     for el in body.iter():
         if not isinstance(el.tag, str):
             continue
