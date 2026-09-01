@@ -22,16 +22,18 @@ class CollapseNewlinesTest(unittest.TestCase):
         self.assertEqual(xml_whitespace.collapse_excess_newlines("a\n\nb"), "a\n\nb")
 
     def test_tree_text_nodes(self):
+        gap = "\n" * 10
         root = etree.fromstring(
-            f'<p xmlns="{TEI_NS}">head{"\n" * 10}tail</p>'.encode(),
+            f'<p xmlns="{TEI_NS}">head{gap}tail</p>'.encode(),
         )
         n = xml_whitespace.collapse_tree_newlines(root)
         self.assertEqual(n, 1)
         self.assertEqual(root.text, "head\n\ntail")
 
     def test_apparatus_padding_fixture(self):
+        padding = "\n" * 50
         padded = f"""<back xmlns="{TEI_NS}">
-  <div type="apparatus"><p>校注{"\n" * 50}</p></div>
+  <div type="apparatus"><p>校注{padding}</p></div>
 </back>"""
         root = etree.fromstring(padded.encode())
         xml_whitespace.collapse_tree_newlines(root)
