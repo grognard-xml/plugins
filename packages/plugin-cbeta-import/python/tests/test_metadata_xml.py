@@ -153,6 +153,40 @@ class WorkInfoEnrichmentTest(unittest.TestCase):
         if creation:
             self.assertNotIn("note", creation.group(1))
 
+    def test_canon_of(self):
+        self.assertEqual(metadata_xml.canon_of("T01n0001"), "T")
+        self.assertEqual(metadata_xml.canon_of("T0001"), "T")
+        self.assertEqual(metadata_xml.canon_of("ZW01n0001"), "ZW")
+        self.assertEqual(metadata_xml.canon_of("JB122n…"), "J")  # series letter, not a 2-letter canon
+        self.assertEqual(metadata_xml.canon_of(""), "")
+
+    def test_build_header_fills_edition_and_dated_imprint_from_canon(self):
+        tree = etree.parse(str(FIXTURE))
+        meta = metadata_xml.resolve_work_meta(tree, "T9999")
+        self.assertEqual(meta.canon, "T")
+        xml = etree.tostring(
+            metadata_xml.build_tei_header(meta, juan_n="1", source_files=["T99n9999"]),
+            encoding="unicode",
+        )
+        self.assertRegex(xml, r"edition>大正新脩大藏經 \(Taishō Shinshū Daizōkyō\)<")
+        self.assertRegex(xml, r'date from="1924" to="1934">1924–1934<')
+        self.assertLess(re.search(r"[:>]edition>", xml).start(), re.search(r"[:<]imprint>", xml).start())
+
+    def test_build_header_uses_when_for_single_year_canon(self):
+        meta = metadata_xml.WorkMeta(work_id="S0001", canon="S", title="測試")
+        xml = etree.tostring(
+            metadata_xml.build_tei_header(meta, juan_n="1"), encoding="unicode"
+        )
+        self.assertRegex(xml, r'date when="1935">1935<')
+
+    def test_build_header_leaves_empty_imprint_for_unlisted_canon(self):
+        meta = metadata_xml.WorkMeta(work_id="A0001", canon="A", title="測試")
+        xml = etree.tostring(
+            metadata_xml.build_tei_header(meta, juan_n="1"), encoding="unicode"
+        )
+        self.assertNotIn("edition>", xml)
+        self.assertRegex(xml, r"imprint><[^>]*date ?/><[^>]*imprint>")
+
 
 if __name__ == "__main__":
     unittest.main()

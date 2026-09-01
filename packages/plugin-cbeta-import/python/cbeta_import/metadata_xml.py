@@ -41,9 +41,21 @@ from lxml import etree
 
 from cbeta_import import _paths
 from cbeta_import.catalog_index import clean_title, split_author
-from cbeta_import.constants import DATA_VERSION_TAG, TEI_NS
+from cbeta_import.constants import CANON_EDITIONS, CBETA_CANONS, DATA_VERSION_TAG, TEI_NS
 
 _TEI = f"{{{TEI_NS}}}"
+
+
+def canon_of(work_id: str) -> str:
+    """Leading canon code of a work id (``T01n0001`` / ``T0001`` -> ``T``,
+    ``ZW01n0001`` -> ``ZW``). Empty when the prefix isn't a known canon."""
+    m = re.match(r"^([A-Z]{1,2})", work_id or "")
+    if not m:
+        return ""
+    two, one = work_id[:2], work_id[:1]
+    if two in CBETA_CANONS and work_id[2:3].isdigit():
+        return two
+    return one if one in CBETA_CANONS else ""
 _BIBL_VOL_NO = re.compile(r"Vol\.\s*([A-Za-z0-9]+)\s*,\s*No\.\s*([A-Za-z0-9]+)", re.I)
 _EXTENT_JUAN = re.compile(r"(\d+)\s*卷")
 _ANON = ("失譯", "闕譯", "未詳", "不詳")
@@ -124,6 +136,7 @@ class WorkMeta:
         """Fields the host `cbetaImportXml.wrapCbetaTeiDocument` consumes."""
         return {
             "title": self.title,
+            "canon": self.canon,
             "dynasty": self.dynasty,
             "category": self.category,
             "taisho_vol": self.taisho_vol,
@@ -191,7 +204,7 @@ def _text(el: etree._Element | None) -> str:
 def extract_from_header(tree: etree._ElementTree | etree._Element, work_id: str) -> WorkMeta:
     root = tree.getroot() if isinstance(tree, etree._ElementTree) else tree
     header = root.find(f".//{_TEI}teiHeader")
-    meta = WorkMeta(work_id=work_id)
+    meta = WorkMeta(work_id=work_id, canon=canon_of(work_id))
     if header is None:
         return meta
 
@@ -333,8 +346,23 @@ def build_tei_header(
         _idno(monogr, "DILA", meta.work_dila_id)
     if meta.taisho_vol and meta.taisho_no:
         _idno(monogr, "Taisho", f"{meta.taisho_vol}.{meta.taisho_no}")
+
+    # <edition> + dated <imprint> from the canon code (must precede <imprint>
+    # in the TEI monogr content model).
+    canon_ed = CANON_EDITIONS.get(meta.canon or canon_of(meta.work_id))
+    if canon_ed:
+        label, y0, y1 = canon_ed
+        etree.SubElement(monogr, f"{_TEI}edition").text = label
     imprint = etree.SubElement(monogr, f"{_TEI}imprint")
-    etree.SubElement(imprint, f"{_TEI}date")
+    date = etree.SubElement(imprint, f"{_TEI}date")
+    if canon_ed:
+        if y0 == y1:
+            date.set("when", y0)
+            date.text = y0
+        else:
+            date.set("from", y0)
+            date.set("to", y1)
+            date.text = f"{y0}–{y1}"
 
     if meta.dynasty or meta.category:
         prof = etree.SubElement(H, f"{_TEI}profileDesc")

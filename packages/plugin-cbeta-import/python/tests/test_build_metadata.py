@@ -56,6 +56,32 @@ CATALOG_L = {
 }
 
 
+# Jiaxing 嘉興藏: canon "J" + a series-lettered text number ("B122"). The
+# catalogue id is not zero-padded ("JB122"); the file stem keeps the letter
+# ("J23nB122"). JB124 is catalogued but has no xml-p5 file.
+CATALOG_J = {
+    "JB122": {
+        "title": "醒世錄",
+        "byline": "清 徐昌治編",
+        "dynasty": "清",
+        "orig_category": "禪宗部類",
+        "juans": 8,
+        "vol": "J23",
+        "type": "textbody",
+        "contributors": [{"id": "A999001", "name": "徐昌治"}],
+    },
+    "JB124": {
+        "title": "高僧摘要",
+        "byline": "",
+        "dynasty": "",
+        "juans": 4,
+        "vol": "J23",
+        "type": "textbody",
+        "contributors": [],
+    },
+}
+
+
 class BuildMetadataTest(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()
@@ -65,6 +91,7 @@ class BuildMetadataTest(unittest.TestCase):
         self.cat_dir.mkdir(parents=True)
         (self.cat_dir / "T.json").write_text(json.dumps(CATALOG_T), "utf-8")
         (self.cat_dir / "L.json").write_text(json.dumps(CATALOG_L), "utf-8")
+        (self.cat_dir / "J.json").write_text(json.dumps(CATALOG_J), "utf-8")
 
         self.corpus = self.tmp / "xml-p5"
         write_work(self.corpus, "T01n0001", title="長阿含經", author="後秦 佛陀耶舍共竺佛念譯", juan=22)
@@ -72,6 +99,7 @@ class BuildMetadataTest(unittest.TestCase):
         write_work(self.corpus, "T06n0220b", title="大般若", author="唐 玄奘譯", juan=1)
         write_work(self.corpus, "L130n1557", title="大毘婆沙論", author="唐 玄奘譯", juan=3)
         write_work(self.corpus, "L131n1557", title="大毘婆沙論", author="唐 玄奘譯", juan=4)
+        write_work(self.corpus, "J23nB122", title="醒世錄", author="清 徐昌治編", juan=8)
 
         self.xw = self.tmp / "crosswalk.csv"
         self.xw.write_text(
@@ -142,6 +170,33 @@ class BuildMetadataTest(unittest.TestCase):
         by_id = {w["work_id"]: w for w in ci["works"]}
         self.assertEqual(by_id["T0001"]["files"], ["T01n0001"])  # reconstructed from vol
         self.assertEqual(by_id["T0220"]["files"], [])  # range → unknown without corpus
+        # series letter kept in the reconstructed stem (not "J23n122")
+        self.assertEqual(by_id["JB122"]["files"], ["J23nB122"])
+        self.assertEqual(by_id["JB122"]["canon"], "J")
+
+    def test_jiaxing_series_letter_matches_corpus(self):
+        """``JB122`` (catalogue) ↔ ``J23nB122`` (corpus, id ``JB0122``)."""
+        _, ci = self.run_build()
+        by_id = {w["work_id"]: w for w in ci["works"]}
+        self.assertEqual(by_id["JB122"]["files"], ["J23nB122"])
+        self.assertEqual(by_id["JB122"]["canon"], "J")
+
+    def test_catalogued_work_absent_from_corpus_has_no_files(self):
+        """JB124 is in the catalogue but has no xml-p5 file → empty, not a fake stem."""
+        self.run_build()
+        from cbeta_import import _paths, catalog_index
+
+        orig = _paths.bundled_catalog_index_path
+        try:
+            _paths.bundled_catalog_index_path = lambda: self.out / "metadata" / "catalog_index.json"
+            hits = {h.work_id: h for h in catalog_index.load_index(cache_root=self.tmp)}
+            self.assertEqual(hits["JB124"].files, ())
+            with self.assertRaises(FileNotFoundError):
+                catalog_index.resolve_work_files(
+                    "JB124", cache_root=self.tmp, corpus_root=self.corpus
+                )
+        finally:
+            _paths.bundled_catalog_index_path = orig
 
     def test_consumed_by_catalog_index_load(self):
         """The built catalog_index.json is loadable by the runtime module."""

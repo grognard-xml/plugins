@@ -1,6 +1,12 @@
 import re
+import sys
 import unittest
 from pathlib import Path
+
+# `python/` on the path so `cbeta_import` imports under `unittest discover`
+# (pytest adds it via rootdir; `unittest` does not, and this module sorts first
+# so it cannot rely on a later test's import side effects).
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lxml import etree
 

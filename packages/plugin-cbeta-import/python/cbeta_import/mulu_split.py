@@ -28,6 +28,22 @@ def _local(tag: object) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+# Milestone-like anchors carry no reading content on their own; a block made up
+# only of these (with no text on them or in their tails) is not a real section.
+_ANCHOR_LOCALS = {"milestone", "lb", "pb"}
+
+
+def _has_reading_content(block: list[etree._Element]) -> bool:
+    """True if ``block`` holds anything a section ``<body>`` needs — i.e. more
+    than bare ``<milestone>``/``<lb>``/``<pb>`` anchors with empty text/tails."""
+    for el in block:
+        if _local(el.tag) not in _ANCHOR_LOCALS:
+            return True
+        if (el.text or "").strip() or (el.tail or "").strip():
+            return True
+    return False
+
+
 def _strip_redundant_head(block: list[etree._Element], title: str) -> list[etree._Element]:
     """Drop a ``<head>`` that only repeats the section title already in ``JuanSlice.title``."""
     if not block or not title.strip():
@@ -56,7 +72,16 @@ def _promote_mulu_markers_to_body(body: etree._Element) -> int:
 
 
 def split_body_into_mulu(tree: etree._ElementTree | etree._Element) -> list[JuanSlice]:
-    """One slice per content-bearing ``cb:mulu`` (except ``type="卷"``), numbered 1..N."""
+    """One slice per content-bearing ``cb:mulu`` (except ``type="卷"``), numbered 1..N.
+
+    A heading with no body content of its own — two ``cb:mulu`` markers in a row
+    (typically a 篇/科 group heading immediately followed by its first child
+    heading), or a heading whose only child is a ``<head>`` repeating its title
+    (stripped by :func:`_strip_redundant_head`) — is *not* emitted as its own
+    slice. Its title is folded into the next slice as ancestor context
+    (``"譯經篇 — 攝摩騰"``) so no heading text is lost and the host never has to
+    wrap an empty ``<body>`` (which it rejects outright).
+    """
     body = find_body(tree)
     markers = [m for m in body.iter(f"{_CB}mulu") if _is_section_mulu(m)]
     if not markers:
@@ -71,6 +96,8 @@ def split_body_into_mulu(tree: etree._ElementTree | etree._Element) -> list[Juan
     slices: list[JuanSlice] = []
     bounds = marker_idx + [len(children)]
     lead = [copy.deepcopy(c) for c in children[: marker_idx[0]]]
+    pending: list[str] = []  # titles of content-less headings awaiting a host slice
+    carry: list[etree._Element] = []  # their anchor-only nodes, prepended to the next slice
 
     for k, start in enumerate(marker_idx):
         end = bounds[k + 1]
@@ -82,7 +109,29 @@ def split_body_into_mulu(tree: etree._ElementTree | etree._Element) -> list[Juan
         block = _strip_redundant_head(block, title)
         if k == 0 and lead:
             block = lead + block
-        slices.append(JuanSlice(n=str(k + 1), title=title, elements=block))
+        if not _has_reading_content(block):
+            # A group heading (譯經篇 …) with no reading content of its own: fold
+            # its title into the next real section and keep any bare anchors.
+            if title:
+                pending.append(title)
+            carry.extend(block)
+            continue
+        full_title = " — ".join([*pending, title]) if pending else title
+        sl = JuanSlice(n=str(len(slices) + 1), title=full_title, elements=carry + block)
+        if pending:
+            sl.straddles.append(
+                f"section {sl.n}: folded in {len(pending)} content-less "
+                f"heading(s) ({', '.join(pending)})"
+            )
+        pending, carry = [], []
+        slices.append(sl)
+
+    if pending and slices:
+        slices[-1].elements.extend(carry)
+        slices[-1].straddles.append(
+            f"section {slices[-1].n}: dropped {len(pending)} trailing content-less "
+            f"heading(s) ({', '.join(pending)})"
+        )
     return slices
 
 

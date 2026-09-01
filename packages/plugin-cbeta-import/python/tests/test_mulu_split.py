@@ -19,6 +19,39 @@ class MuluSplitTest(unittest.TestCase):
         self.assertEqual(slices[0].title, "第一品")
         self.assertEqual(slices[1].title, "小節甲")
 
+    def test_contentless_headings_folded_not_emitted_as_empty_slices(self):
+        slices = split_file(FX / "mulu_empty_section.xml")
+        # Every emitted slice carries body content — no empty <body> reaches the host.
+        for sl in slices:
+            self.assertTrue(sl.elements, f"slice {sl.n} ({sl.title!r}) has no content")
+        # Numbering is contiguous 1..N over the emitted slices only.
+        self.assertEqual([s.n for s in slices], [str(i + 1) for i in range(len(slices))])
+        # The 科 group heading is folded into its first child's title.
+        self.assertEqual(slices[0].title, "譯經篇 — 攝摩騰")
+        self.assertEqual(slices[1].title, "竺法蘭")
+        self.assertEqual(slices[2].title, "義解篇 — 朱士行")
+        # The trailing content-less heading is recorded as a straddle note.
+        self.assertTrue(
+            any("附錄" in note for note in slices[-1].straddles),
+            slices[-1].straddles,
+        )
+
+    def test_contentless_headings_convert_without_empty_body(self):
+        result = convert_cbeta_xml(
+            FX / "mulu_empty_section.xml",
+            cross_family=True,
+            split_unit="mulu",
+        )
+        self.assertEqual([j["n"] for j in result["juan"]], ["1", "2", "3"])
+        for row in result["juan"]:
+            root = etree.fromstring(row["body_xml"].encode("utf-8"))
+            body = root.find(f".//{_TEI}body")
+            self.assertIsNotNone(body)
+            self.assertTrue(
+                "".join(body.itertext()).strip() or len(body),
+                f"section {row['n']} serialized an empty <body>",
+            )
+
     def test_mulu_default_with_juan_fallback(self):
         result = convert_cbeta_xml(FX / "minimal_cbeta.xml", split_unit="mulu")
         self.assertIn("fell back to juan", " ".join(result.get("warnings", [])))

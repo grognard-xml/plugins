@@ -84,6 +84,14 @@ def phonetic_glosses(body: etree._Element) -> int:
             readings.append(_gloss_note("".join(sg.itertext()), fanqie=True))
         for note in el.findall(f".//{_TEI}note"):
             readings.append(_gloss_note("".join(note.itertext()), fanqie=True))
+        if not readings:
+            # real 一切經音義 shape: <cb:fan><cb:zi>字</cb:zi><cb:yin>某某反</cb:yin>
+            # — the fanqie sits as bare text on <cb:yin> (no <cb:sg>, no <note>);
+            # itertext drops any interrupting <lb/>, split() collapses its newline.
+            for yin in el.findall(f"{_CB}yin"):
+                txt = "".join("".join(yin.itertext()).split())
+                if txt:
+                    readings.append(_gloss_note(txt, fanqie=True))
         _splice(el, zi, readings)
         n += 1
     # standalone cb:yin

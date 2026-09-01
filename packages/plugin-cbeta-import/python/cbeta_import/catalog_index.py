@@ -336,6 +336,12 @@ def resolve_work_files(
     index = load_index(cache_root=croot, corpus_root=corpus)
     for hit in index:
         if hit.work_id == wid:
+            if not hit.files:
+                raise FileNotFoundError(
+                    f"work {wid} ({hit.title or '?'}) is in the CBETA catalogue but has no "
+                    f"TEI/XML source in the synced xml-p5 corpus — it is not digitised in "
+                    f"this CBETA release (common for parts of the Jiaxing 嘉興藏)."
+                )
             paths = hit.paths(corpus)
             missing = [p for p in paths if not p.is_file()]
             if missing:

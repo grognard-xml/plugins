@@ -36,6 +36,28 @@ class PhoneticGlossTest(unittest.TestCase):
         notes = body[0].findall(f"{_TEI}note")
         self.assertEqual([n.get("subtype") for n in notes], ["fanqie", None])
 
+    def test_fan_bare_text_yin(self):
+        # real T54n2128 (慧琳 一切經音義) shape: fanqie is bare text on <cb:yin>,
+        # no <cb:sg> and no <note>. §10.4 sanity check — was silently dropped.
+        body = _frag("<p>似<cb:fan><cb:zi>蠅</cb:zi><cb:yin>以繒反</cb:yin></cb:fan>而大</p>")
+        downgrade.phonetic_glosses(body)
+        p = body[0]
+        self.assertIsNone(p.find(f"{_CB}fan"))
+        note = p.find(f"{_TEI}note")
+        self.assertEqual(note.get("type"), "gloss")
+        self.assertEqual(note.get("subtype"), "fanqie")
+        self.assertEqual(note.text, "以繒反")
+        self.assertEqual(p.text, "似蠅")  # headword stays inline before the note
+        self.assertTrue(("".join(p.itertext())).endswith("而大"))
+
+    def test_fan_yin_with_interrupting_lb(self):
+        body = _frag(
+            '<p><cb:fan><cb:zi>x</cb:zi><cb:yin>俱<lb n="0372a21" ed="T"/>籰反'
+            "</cb:yin></cb:fan></p>"
+        )
+        downgrade.phonetic_glosses(body)
+        self.assertEqual(body[0].find(f"{_TEI}note").text, "俱籰反")
+
     def test_fan(self):
         body = _frag('<p>誦<cb:fan><cb:zi>儒</cb:zi><cb:yin><note place="inline">仁祚切</note></cb:yin></cb:fan>字</p>')
         downgrade.phonetic_glosses(body)

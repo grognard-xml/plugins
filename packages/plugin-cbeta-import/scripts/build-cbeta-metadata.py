@@ -52,7 +52,11 @@ from cbeta_import.catalog_index import (  # noqa: E402
     build_index_from_corpus,
     group_stems,
 )
+from cbeta_import.constants import CBETA_CANONS  # noqa: E402
 from cbeta_import.metadata_xml import parse_byline  # noqa: E402
+
+# Longest canon prefixes first so "CC"/"GA"/"TX" win over "C"/"G"/"T".
+_CANONS = sorted(CBETA_CANONS, key=lambda c: (-len(c), c))
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from loosen_schema import loosen_rng, loosen_sch  # noqa: E402
@@ -212,13 +216,52 @@ def build_work_info(
     return out
 
 
+def _split_wid(wid: str) -> tuple[str, str, str, str] | None:
+    """``"JB122"`` → ``("J", "B", "122", "")``; ``"T0001"`` → ``("T", "", "0001", "")``.
+
+    The DILA catalogue prefixes the canon (``J``) to a text number that itself
+    may carry a leading series letter (``B122``). A naive ``[A-Z]{1,2}`` grab
+    eats ``JB`` as the canon and drops the ``B`` from the file stem.
+    """
+    for c in _CANONS:
+        if wid.startswith(c):
+            m = re.match(r"^([A-Za-z]?)(\d{1,4})([A-Za-z]?)$", wid[len(c):])
+            if m:
+                return (c, m.group(1), m.group(2), m.group(3))
+    return None
+
+
+def _norm_wid(wid: str) -> str:
+    """Catalogue id → the id ``build_index_from_corpus`` / ``group_stems`` emit
+    (core zero-padded to 4): ``"JB122"`` → ``"JB0122"``, ``"T0001"`` → ``"T0001"``."""
+    parts = _split_wid(wid)
+    if not parts:
+        return ""
+    canon, lead, core, trail = parts
+    return f"{canon}{lead}{core.zfill(4)}{trail}"
+
+
+def _canon_of(wid: str) -> str:
+    parts = _split_wid(wid)
+    if parts:
+        return parts[0]
+    m = re.match(r"^[A-Z]{1,2}", wid)
+    return m.group(0) if m else ""
+
+
 def _vol_stems(wid: str, vol: str) -> list[str]:
-    """Single-volume: reconstruct the file stem. Ranges (``T05..T07``) → []."""
-    if not vol or ".." in vol:
+    """Single-volume: reconstruct the file stem. Ranges (``T05..T07``) → [].
+
+    Fallback only — used when no corpus/file-list is available to ground the
+    grouping. Keeps the series letter (``J23`` + ``B122`` → ``J23nB122``).
+    """
+    if not vol or ".." in vol or not re.match(r"^[A-Za-z]{1,2}\d{1,3}$", vol):
         return []
-    m = re.match(r"^([A-Z]{1,2})(\d{1,3})$", vol)
-    n = re.match(r"^([A-Z]{1,2})([A-Za-z]?\d{1,4}[A-Za-z]?)$", wid)
-    return [f"{vol}n{n.group(2)}"] if m and n else []
+    parts = _split_wid(wid)
+    if not parts:
+        return []
+    _canon, lead, core, trail = parts
+    return [f"{vol}n{lead}{core}{trail}"]
 
 
 def build_catalog_index(
@@ -241,13 +284,19 @@ def build_catalog_index(
     for wid, entry in catalog.items():
         if entry.get("type") not in (None, "textbody"):
             continue
-        files = grouped.get(wid) or tuple(_vol_stems(wid, str(entry.get("vol", ""))))
+        # Grounded grouping wins; the catalogue id and its zero-padded form are
+        # both tried (``JB122`` vs the corpus's ``JB0122``). With a corpus or
+        # file-list present, a miss means the work has no xml-p5 file — leave
+        # ``files`` empty rather than fabricating a stem that will 404 on import.
+        files = grouped.get(wid) or grouped.get(_norm_wid(wid)) or ()
+        if not files and src == "vol":
+            files = tuple(_vol_stems(wid, str(entry.get("vol", ""))))
         works.append(
             asdict(
                 CatalogHit(
                     work_id=wid,
                     title=entry.get("title", ""),
-                    canon=re.match(r"^[A-Z]{1,2}", wid).group(0) if re.match(r"^[A-Z]{1,2}", wid) else "",
+                    canon=_canon_of(wid),
                     dynasty=entry.get("dynasty", ""),
                     category=entry.get("orig_category") or entry.get("category", ""),
                     juan_count=int(entry.get("juans") or 0),

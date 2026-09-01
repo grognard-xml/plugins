@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Mulu empty-section test</title></titleStmt>
+      <sourceDesc><bibl>test</bibl></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <milestone n="1" unit="juan"/>
+      <lb n="0001a01" ed="T"/>
+      <!-- A 科 group heading immediately followed by its first child heading:
+           the group has no body content of its own. -->
+      <cb:mulu level="1" type="科">譯經篇</cb:mulu>
+      <cb:mulu level="2" type="其他">攝摩騰</cb:mulu>
+      <p xml:id="p0001a0101">攝摩騰傳文。</p>
+      <cb:mulu level="2" type="其他">竺法蘭</cb:mulu>
+      <p xml:id="p0001a0201">竺法蘭傳文。</p>
+      <cb:mulu level="1" type="科">義解篇</cb:mulu>
+      <cb:mulu level="2" type="其他">朱士行</cb:mulu>
+      <p xml:id="p0001a0301">朱士行傳文。</p>
+      <!-- Trailing group heading with nothing after it. -->
+      <cb:mulu level="1" type="科">附錄</cb:mulu>
+    </body>
+  </text>
+</TEI>
