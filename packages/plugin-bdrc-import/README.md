@@ -12,6 +12,11 @@ re-import offline.
   **File → Import from BDRC…**. Same path as the Wikisource / Kanripo adapters.
 - **Unit:** one `UT` etext volume per import, `<pb/>` markers throughout.
 - **Language:** Tibetan (`bo`).
+- **Edition metadata:** the scanned instance's edition statement, publisher /
+  place, and publication year (ISO `<date>` only when BDRC carries a clean
+  4-digit year) are pulled from its `/resource/<MW>` describe graph into
+  `<sourceDesc><bibl>`, alongside a `<note type="source">` naming BDRC and the
+  URL the volume was imported from.
 - **Authority:** persons (`bdr:P…`) / places (`bdr:G…`) emitted as `@ref`
   URIs; names resolved later via the Wikidata P2477 crosswalk. No bundled pack.
 
