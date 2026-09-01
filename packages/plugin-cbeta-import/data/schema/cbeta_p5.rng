@@ -1,6 +1,6 @@
 <?xml version='1.0' encoding='UTF-8'?>
 <grammar xmlns:a="http://relaxng.org/ns/compatibility/annotations/1.0" xmlns:s="http://www.ascc.net/xml/schematron" xmlns:tei="http://www.tei-c.org/ns/1.0" xmlns:rng="http://relaxng.org/ns/structure/1.0" xmlns:ns1="http://www.cbeta.org/ns/1.0" xmlns="http://relaxng.org/ns/structure/1.0" ns="http://www.tei-c.org/ns/1.0" datatypeLibrary="http://www.w3.org/2001/XMLSchema-datatypes">
-  <a:documentation>Le Jean-Baptiste: CBETA P5 + LJB tagging loosenings (ljb-cbeta-loosen v1) — {'authority_attrs': 4, 'phrase_refs': 8, 'date_extended': 2}</a:documentation><!--
+  <a:documentation>Le Jean-Baptiste: CBETA P5 + LJB tagging loosenings (ljb-cbeta-loosen v2) — {'authority_attrs': 0, 'phrase_refs': 0, 'date_extended': 0, 'dual_ns_div': 1, 'creation_widened': 1, 'keywords_scheme_optional': 1, 'role_attr': 1}</a:documentation><!--
     Schema generated from ODD source 2011-01-08T10:01:44Z. 
     TEI Edition: 1.3.0. Last updated on February 1st 2009.
     
@@ -2960,7 +2960,7 @@ to others within the personal name.</a:documentation>
       <ref name="att.global.attributes"/>
       <ref name="att.canonical.attributes"/>
       <empty/>
-    </element>
+    <optional><attribute name="role"><text/></attribute></optional></element>
   </define>
   <define name="tei_editor">
     <element name="editor">
@@ -4352,7 +4352,7 @@ or hand distinguished within a manuscript.</a:documentation>
   <define name="tei_creation">
     <element name="creation">
       <a:documentation>contains information about the creation of a text.</a:documentation>
-      <ref name="tei_macro.phraseSeq.limited"/>
+      <ref name="tei_macro.phraseSeq"/>
       <ref name="att.global.attributes"/>
       <empty/>
     </element>
@@ -4420,13 +4420,13 @@ nature of a text.</a:documentation>
         <ref name="tei_list"/>
       </choice>
       <ref name="att.global.attributes"/>
-      <attribute name="scheme">
+      <optional><attribute name="scheme">
         <a:documentation>identifies the controlled vocabulary within which the set of
   keywords concerned is defined.
    </a:documentation>
         <data type="anyURI"/>
       </attribute>
-      <empty/>
+      </optional><empty/>
     </element>
   </define>
   <define name="tei_classCode">
@@ -4770,8 +4770,8 @@ teiCorpus element.</a:documentation>
     </element>
   </define>
   <define name="tei_div">
-    <element name="ns1:div">
-      <a:documentation>(text division) contains a subdivision of the front, body, or back of a text.</a:documentation>
+    <element>
+      <choice><name ns="http://www.cbeta.org/ns/1.0">div</name><name ns="http://www.tei-c.org/ns/1.0">div</name></choice><a:documentation>(text division) contains a subdivision of the front, body, or back of a text.</a:documentation>
       <zeroOrMore>
         <choice>
           <ref name="tei_mulu"/>

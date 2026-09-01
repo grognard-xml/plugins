@@ -3,7 +3,8 @@
 
 CBETA ships one flat, ODD-generated grammar (`cbeta-p5.rng`, `tei_`-prefixed
 pattern names, ~570 `<define>`s) with 3 embedded Schematron rules. We widen it
-just enough to hold our tagging apparatus — no new TEI elements, only:
+just enough to hold our tagging apparatus and to serve as a shared target for
+the other East Asian corpus importers (Daozang, Kanripo, Wikisource, BDRC):
 
 1. `@ref` / `@key` permitted on `<title>`, `<author>`, `<byline>` and every NE
    element (per-define, guarded so we never double-declare an attribute);
@@ -14,6 +15,19 @@ just enough to hold our tagging apparatus — no new TEI elements, only:
    (leaf-writer/docs/ljb-tei-extensions.md; kept in sync with
    apps/desktop/src/sanmiaoSchemaMerge.ts).
 
+v2 adds three model loosenings so non-CBETA corpora (which emit plain TEI
+`<div type="…">`, `<creation><origDate>`, unscoped `<keywords>`) validate
+against the same grammar as native CBETA:
+
+4. `tei_div` matches BOTH `<cb:div>` and TEI-namespace `<div>` — every context
+   that allows a division (`model.divLike`, nested divs, front/back) now takes
+   either;
+5. `<creation>` content widened from `macro.phraseSeq.limited` to
+   `macro.phraseSeq` (admits `<date>` / names — note CBETA has no `<origDate>`,
+   so importers must record composition date as `<date>`);
+6. `@scheme` on `<keywords>` made optional;
+7. optional `@role` on `<author>` / `<editor>` (CBETA drops `att.naming`).
+
 Interleaving (§4.3 — `<lb/>`/`<pb/>`/`<anchor/>`/`<g>` inside NE elements) is
 already satisfied: the NE defines use `tei_macro.phraseSeq`, which pulls
 `tei_model.global` (milestones/anchor) and `tei_model.gLike` (`g`).
@@ -21,6 +35,9 @@ already satisfied: the NE defines use `tei_macro.phraseSeq`, which pulls
 Schematron: CBETA's only rules require `@spanTo` on `addSpan`/`damageSpan`/
 `delSpan` — nothing touches inserted markup — so the `.sch` passes through
 unchanged.
+
+Every step is individually idempotent, so re-running on a v1 output upgrades it
+to v2 in place.
 
 Usage:  loosen_schema.py IN.rng OUT.rng [IN.sch OUT.sch]
 """
@@ -37,7 +54,11 @@ A = "http://relaxng.org/ns/compatibility/annotations/1.0"
 _R = f"{{{RNG}}}"
 _A = f"{{{A}}}"
 
-MARKER = "ljb-cbeta-loosen v1"
+MARKER = "ljb-cbeta-loosen v2"
+
+RNG_NS_URI = RNG  # relaxng structure ns (for building <name> patterns)
+CBETA_NS_URI = "http://www.cbeta.org/ns/1.0"
+TEI_NS_URI = "http://www.tei-c.org/ns/1.0"
 
 # Kept in sync with sanmiaoSchemaMerge.ts (SANMIAO_DATE_PARTS @ v14).
 SANMIAO_DATE_PARTS = (
@@ -227,19 +248,118 @@ def _append_ljb_defines(root: etree._Element, defs: dict[str, etree._Element]) -
         root.append(d)
 
 
+def _dual_namespace_div(defs: dict[str, etree._Element]) -> int:
+    """`tei_div` element matches both `<cb:div>` (ns1) and TEI-namespace `<div>`.
+
+    Non-CBETA importers emit plain `<div type="…">`; CBETA binds `model.divLike`
+    to `<cb:div>` only, so their output is rejected in `<body>`. Widening the one
+    `tei_div` define reaches every division context (nested divs, front/back).
+    """
+    d = defs.get("tei_div")
+    if d is None:
+        return 0
+    el = d.find(f"{_R}element")
+    if el is None:
+        return 0
+    # Already dual? (name= attribute dropped in favour of a <choice> of <name>s)
+    if el.get("name") is None and el.find(f"{_R}choice/{_R}name") is not None:
+        return 0
+    del el.attrib["name"]
+    choice = etree.Element(f"{_R}choice")
+    for ns in (CBETA_NS_URI, TEI_NS_URI):
+        name = etree.SubElement(choice, f"{_R}name")
+        name.set("ns", ns)
+        name.text = "div"
+    el.insert(0, choice)
+    return 1
+
+
+def _widen_creation(defs: dict[str, etree._Element]) -> int:
+    """`<creation>` content: `macro.phraseSeq.limited` → `macro.phraseSeq`.
+
+    The limited sequence excludes `model.phrase` (so `<date>` / `<origDate>` /
+    names are rejected); the corpus importers all record composition dynasty /
+    author dates there.
+    """
+    d = defs.get("tei_creation")
+    if d is None:
+        return 0
+    el = d.find(f"{_R}element")
+    if el is None:
+        return 0
+    changed = 0
+    for ref in el.findall(f"{_R}ref"):
+        if ref.get("name") == "tei_macro.phraseSeq.limited":
+            ref.set("name", "tei_macro.phraseSeq")
+            changed = 1
+    return changed
+
+
+def _add_role_attr(defs: dict[str, etree._Element]) -> int:
+    """Optional `@role` on `<author>` / `<editor>` (CBETA drops `att.naming`).
+
+    The corpus importers carry a responsibility function ("editor", "translator",
+    "commentator", …) on the bibliographic name; stock TEI allows it via
+    `att.naming`, CBETA's flattened `tei_author` / `tei_editor` do not.
+    """
+    n = 0
+    for name in ("tei_author", "tei_editor"):
+        d = defs.get(name)
+        if d is None:
+            continue
+        el = d.find(f"{_R}element")
+        if el is None or _has_direct_attr(d, "role"):
+            continue
+        el.append(_optional_attr("role"))
+        n += 1
+    return n
+
+
+def _optional_keywords_scheme(defs: dict[str, etree._Element]) -> int:
+    """`@scheme` on `<keywords>` made optional (CBETA marks it required)."""
+    d = defs.get("tei_keywords")
+    if d is None:
+        return 0
+    el = d.find(f"{_R}element")
+    if el is None:
+        return 0
+    for attr in el.findall(f"{_R}attribute"):
+        if attr.get("name") != "scheme":
+            continue
+        parent = attr.getparent()
+        if parent.tag == f"{_R}optional":
+            return 0
+        idx = list(el).index(attr)
+        opt = etree.Element(f"{_R}optional")
+        el.remove(attr)
+        opt.append(attr)
+        el.insert(idx, opt)
+        return 1
+    return 0
+
+
 def loosen_rng(text: str) -> str:
-    root = etree.fromstring(text.encode("utf-8"))
     if MARKER in text:
-        return text  # idempotent
+        return text  # already at this version — idempotent
+
+    root = etree.fromstring(text.encode("utf-8"))
 
     defs = _defines(root)
     report = {
         "authority_attrs": _add_authority_attrs(defs),
         "phrase_refs": _expand_model_phrase(defs),
         "date_extended": _extend_date(defs),
+        "dual_ns_div": _dual_namespace_div(defs),
+        "creation_widened": _widen_creation(defs),
+        "keywords_scheme_optional": _optional_keywords_scheme(defs),
+        "role_attr": _add_role_attr(defs),
     }
     _append_ljb_defines(root, defs)
 
+    # Replace any prior LJB loosen note rather than stacking one per run.
+    for node in root.findall(f"{_A}documentation"):
+        if node.text and "LJB tagging loosenings" in node.text:
+            root.remove(node)
     doc = etree.Element(f"{_A}documentation")
     doc.text = (
         f"Le Jean-Baptiste: CBETA P5 + LJB tagging loosenings ({MARKER}) — "

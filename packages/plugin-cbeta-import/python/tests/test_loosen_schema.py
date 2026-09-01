@@ -74,5 +74,58 @@ class LoosenSchemaTest(unittest.TestCase):
         self.assertEqual(ls.loosen_sch("<schema/>"), "<schema/>")
 
 
+_BUNDLED = _PKG / "data" / "schema" / "cbeta_p5.rng"
+
+
+@unittest.skipUnless(_BUNDLED.exists(), "bundled cbeta_p5.rng not built")
+class LoosenSchemaV2Test(unittest.TestCase):
+    """v2 model loosenings — shared target for the non-CBETA corpus importers."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.text = _BUNDLED.read_text("utf-8")
+        cls.rng = etree.RelaxNG(etree.fromstring(cls.text.encode()))
+
+    def test_is_v2(self):
+        self.assertIn("ljb-cbeta-loosen v2", self.text)
+
+    def test_div_is_dual_namespace(self):
+        root = etree.fromstring(self.text.encode())
+        R = "{http://relaxng.org/ns/structure/1.0}"
+        div = next(d for d in root.iter(f"{R}define") if d.get("name") == "tei_div")
+        el = div.find(f"{R}element")
+        self.assertIsNone(el.get("name"))
+        ns = {n.get("ns") for n in el.iter(f"{R}name")}
+        self.assertEqual(
+            ns,
+            {"http://www.cbeta.org/ns/1.0", "http://www.tei-c.org/ns/1.0"},
+        )
+
+    def _doc(self, body: str) -> etree._Element:
+        return etree.fromstring(
+            (
+                '<TEI xmlns="http://www.tei-c.org/ns/1.0" '
+                'xmlns:cb="http://www.cbeta.org/ns/1.0">'
+                "<teiHeader><fileDesc>"
+                "<titleStmt><title>x</title><author role=\"editor\">y</author></titleStmt>"
+                "<publicationStmt><publisher/></publicationStmt>"
+                "<sourceDesc><p>s</p></sourceDesc></fileDesc>"
+                "<profileDesc><creation><date>唐</date></creation>"
+                "<textClass><keywords><term>k</term></keywords></textClass></profileDesc>"
+                "</teiHeader><text><body>" + body + "</body></text></TEI>"
+            ).encode()
+        )
+
+    def test_plain_tei_div_validates_in_body(self):
+        doc = self._doc('<div type="juan" n="1"><p>正文</p></div>')
+        self.assertTrue(self.rng.validate(doc), [str(e) for e in self.rng.error_log])
+
+    def test_cb_div_still_validates_in_body(self):
+        doc = self._doc(
+            '<milestone unit="juan" n="1"/><cb:div type="other"><p>正文</p></cb:div>'
+        )
+        self.assertTrue(self.rng.validate(doc), [str(e) for e in self.rng.error_log])
+
+
 if __name__ == "__main__":
     unittest.main()
