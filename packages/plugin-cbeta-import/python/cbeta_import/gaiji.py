@@ -9,17 +9,48 @@ image. Siddhaṃ (``#SD-…``) and Rañjana (``#RJ-…``) never resolve — kept
 
 from __future__ import annotations
 
+import re
+
 from lxml import etree
 
 from cbeta_import.constants import TEI_NS
 
 _TEI = f"{{{TEI_NS}}}"
 
+# CBETA <charDecl> mappings carry codepoints in "U+XXXX" notation
+# (e.g. <mapping type="unicode">U+478B</mapping>), sometimes several
+# separated by whitespace or commas for a composed sequence.
+_CODEPOINT_RE = re.compile(r"^(?:[Uu]\+[0-9A-Fa-f]{4,6}[\s,]*)+$")
+
+
+def _decode_mapping(text: str) -> str | None:
+    """Turn a ``<mapping>`` payload into an actual Unicode string.
+
+    ``"U+478B"`` → ``"䞋"``; ``"U+3401 U+4E00"`` → the two-char sequence.
+    A payload that is already literal characters is returned as-is. Returns
+    ``None`` when nothing usable is left (e.g. an empty mapping).
+    """
+    text = text.strip()
+    if not text:
+        return None
+    if _CODEPOINT_RE.match(text):
+        try:
+            chars = [
+                chr(int(cp[2:], 16))
+                for cp in re.split(r"[\s,]+", text)
+                if cp
+            ]
+        except (ValueError, OverflowError):
+            return None
+        return "".join(chars) or None
+    return text
+
 
 def load_char_decl(tree: etree._ElementTree | etree._Element) -> dict[str, str]:
     """Map ``xml:id`` → Unicode string from ``<charDecl><char>``.
 
-    Reads ``<mapping type="unicode">`` / ``<unicode>`` / codepoint children.
+    Reads ``<mapping type="unicode">`` (preferred) or ``type="normal_unicode">``,
+    decoding CBETA's ``U+XXXX`` codepoint notation into real characters.
     TODO: honour ``<charProp>`` composition and normalization hints.
     """
     root = tree.getroot() if isinstance(tree, etree._ElementTree) else tree
@@ -28,10 +59,20 @@ def load_char_decl(tree: etree._ElementTree | etree._Element) -> dict[str, str]:
         cid = char.get(f"{{{'http://www.w3.org/XML/1998/namespace'}}}id")
         if not cid:
             continue
+        best: str | None = None
         for mapping in char.iter(f"{_TEI}mapping"):
-            if mapping.get("type") in {"unicode", "normal_unicode"} and mapping.text:
-                out[cid] = mapping.text.strip()
+            mtype = mapping.get("type")
+            if mtype not in {"unicode", "normal_unicode"} or not mapping.text:
+                continue
+            decoded = _decode_mapping(mapping.text)
+            if decoded is None:
+                continue
+            if mtype == "unicode":
+                best = decoded
                 break
+            best = best or decoded
+        if best is not None:
+            out[cid] = best
     return out
 
 
@@ -45,7 +86,7 @@ def resolve(g_el: etree._Element, char_map: dict[str, str]) -> str | None:
         return hit
     # some <g> carry the character as their own text content
     if g_el.text and g_el.text.strip():
-        return g_el.text.strip()
+        return _decode_mapping(g_el.text)
     return None  # TODO: consult bundled cb_gaiji.json; PUA fallback
 
 

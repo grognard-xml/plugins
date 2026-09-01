@@ -647,6 +647,9 @@ def apply_ai_parallel_segments(
         han_end = item.get("han_end")
         if isinstance(han_start, int) and isinstance(han_end, int):
             result = apply_scoped_parallel_punctuation(xml, parallel_text, han_start, han_end)
+            if not result.get("applied"):
+                # Scoped range can disagree with model output; retry global infix search.
+                result = apply_parallel_punctuation(xml, parallel_text)
         else:
             result = apply_parallel_punctuation(xml, parallel_text)
         if result.get("applied"):
@@ -677,23 +680,34 @@ def apply_ai_parallel_segments(
     }
 
 
+def _coerce_han_index(value: object) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float) and value.is_integer():
+        return int(value)
+    return None
+
+
 def bridge_ai_parallel_apply(payload: dict) -> dict:
     body_xml = str(payload.get("body_xml") or "")
     parallels_raw = payload.get("segment_parallels")
     if not isinstance(parallels_raw, list):
         parallels_raw = []
-    segment_parallels = [
-        {
+    segment_parallels = []
+    for item in parallels_raw:
+        if not isinstance(item, dict):
+            continue
+        entry: dict[str, object] = {
             "parallel_text": str(item.get("parallel_text") or ""),
-            **(
-                {"han_start": int(item["han_start"]), "han_end": int(item["han_end"])}
-                if isinstance(item.get("han_start"), int) and isinstance(item.get("han_end"), int)
-                else {}
-            ),
         }
-        for item in parallels_raw
-        if isinstance(item, dict)
-    ]
+        han_start = _coerce_han_index(item.get("han_start"))
+        han_end = _coerce_han_index(item.get("han_end"))
+        if han_start is not None and han_end is not None:
+            entry["han_start"] = han_start
+            entry["han_end"] = han_end
+        segment_parallels.append(entry)
     reflow = payload.get("reflow", True) is not False
     return apply_ai_parallel_segments(body_xml, segment_parallels, reflow=reflow)
 

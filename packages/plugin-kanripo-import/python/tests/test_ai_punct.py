@@ -265,6 +265,170 @@ def test_scoped_parallel_tolerates_variant_normalization():
     assert "庻" in result["body_xml"]
 
 
+def test_scoped_parallel_trims_full_llm_output_to_selection_range():
+    """Regression: LLM returns the whole passage while apply is scoped to a sub-range."""
+    from kanripo_import.parallel_punct import apply_scoped_parallel_punctuation
+
+    body = (
+        '<div type="juan"><p>鄭康成則直曰河圖有九篇洛書有六篇說者謂其本</p>'
+        "<p>諸緯書緯書者哀平間實始有之非古也不可據也而</p>"
+        "<p>其誤有可以理證者典籍之字生于卦畫卦畫之智發</p>"
+        '<p><pb n="KR1a0029_WYG_001-3a"/>于圖書易謂書契取夬為象是八卦已重而文字始生</p>'
+        "<p>也</p></div>"
+    )
+    meta = list_segments(body)["segments"][0]
+    full_parallel = (
+        "鄭康成則直曰：「河圖有九篇，洛書有六篇。」說者謂其本諸緯書，緯書者，"
+        "哀平間實始有之，非古也，不可據也。而其誤有可以理證者，典籍之字生於卦畫，"
+        "卦畫之智發於圖書。易謂「書契取夬為象」，是八卦已重，而文字始生。"
+    )
+    # Selection from the second Kanripo line onward (global Han index 22).
+    result = apply_scoped_parallel_punctuation(
+        body,
+        full_parallel,
+        22,
+        meta["han_end"],
+    )
+    assert result["applied"] is True
+    xml = result["body_xml"]
+    assert "緯書，" in xml
+    assert "，" in xml
+    assert han_only(body) == han_only(xml)
+    assert_well_formed(xml)
+
+
+def test_ai_parallel_scoped_failure_falls_back_to_global_overlap():
+    """When scoped align fails, apply_ai_parallel_segments retries with global infix search."""
+    body = (
+        '<div type="juan"><p>鄭康成則直曰河圖有九篇洛書有六篇說者謂其本</p>'
+        "<p>諸緯書緯書者哀平間實始有之非古也不可據也而</p>"
+        "<p>其誤有可以理證者典籍之字生于卦畫卦畫之智發</p>"
+        '<p><pb n="KR1a0029_WYG_001-3a"/>于圖書易謂書契取夬為象是八卦已重而文字始生</p>'
+        "<p>也</p></div>"
+    )
+    meta = list_segments(body)["segments"][0]
+    full_parallel = (
+        "鄭康成則直曰：「河圖有九篇，洛書有六篇。」說者謂其本諸緯書，緯書者，"
+        "哀平間實始有之，非古也，不可據也。而其誤有可以理證者，典籍之字生於卦畫，"
+        "卦畫之智發於圖書。易謂「書契取夬為象」，是八卦已重，而文字始生。"
+    )
+    # Simulate old scoped-only failure: sub-range with full model output.
+    result = apply_ai_parallel_segments(
+        body,
+        [
+            {
+                "parallel_text": full_parallel,
+                "han_start": 22,
+                "han_end": meta["han_end"],
+            }
+        ],
+        reflow=False,
+    )
+    assert result["applied"] is True
+    assert result["stats"]["align_failed"] == 0
+    assert "，" in result["body_xml"]
+
+
+def test_ai_parallel_on_cbeta_prefixed_body_fragment():
+    """CBETA ``body`` extracts keep ``cb:`` prefixes without ``xmlns:cb`` on the fragment."""
+    text = (
+        "鄭康成則直曰河圖有九篇洛書有六篇說者謂其本諸緯書緯書者哀平間實始有之非古也不可據也而"
+        "其誤有可以理證者典籍之字生于卦画卦画之智發于圖書易謂書契取夬為象是八卦已重而文字始生也"
+    )
+    body = f"<cb:div><p>{text}</p></cb:div>"
+    parallel = (
+        "鄭康成則直曰：「河圖有九篇，洛書有六篇。」說者謂其本諸緯書。緯書者，"
+        "哀平間實始有之，非古也，不可據也。而其誤有可以理證者，典籍之字生于卦畫，"
+        "卦畫之智發于圖書。易謂書契取夬為象，是八卦已重而文字始生也。"
+    )
+    meta = list_segments(body)["segments"][0]
+    result = apply_ai_parallel_segments(
+        body,
+        [{"parallel_text": parallel, "han_start": 0, "han_end": meta["han_end"]}],
+        reflow=False,
+    )
+    assert result["applied"] is True
+    assert "，" in result["body_xml"]
+    assert han_only(body) == han_only(result["body_xml"])
+    assert_well_formed(result["body_xml"])
+
+
+INLINE_COMM_BODY = (
+    '<div type="juan"><p>甲乙丙丁戊'
+    '<note type="comm">己庚辛</note>'
+    "壬癸子丑寅卯辰巳午未</p></div>"
+)
+
+
+def test_scoped_parallel_after_inline_comm_note_not_shifted():
+    """Regression: a text segment that follows an inline ``<note type="comm">``.
+
+    ``list_segments`` counts the comm note's Han (``己庚辛``) in its index space,
+    so ``apply_scoped_parallel_punctuation`` must build its tape the same way.
+    With the note-collapsed tokenizer the range slid left by 3 and the segment
+    was dropped at the ``min_map_ratio`` gate (``applied`` False).
+    """
+    from kanripo_import.parallel_punct import apply_scoped_parallel_punctuation
+
+    segments = list_segments(INLINE_COMM_BODY)["segments"]
+    assert [s["kind"] for s in segments] == ["text", "comm", "text"]
+    post_note = segments[2]
+    assert post_note["han"] == "壬癸子丑寅卯辰巳午未"
+
+    result = apply_scoped_parallel_punctuation(
+        INLINE_COMM_BODY,
+        "壬癸。子丑，寅卯辰巳午未。",
+        post_note["han_start"],
+        post_note["han_end"],
+    )
+    assert result["applied"] is True
+    xml = result["body_xml"]
+    # Marks land on the intended characters, not shifted by the note length:
+    # the whole segment is punctuated contiguously and nothing leaks into the
+    # preceding run or the note itself.
+    assert "壬癸。子丑，寅卯辰巳午未。" in xml
+    assert "甲乙丙丁戊" in xml
+    assert '<note type="comm">己庚辛</note>' in xml
+    assert han_only(INLINE_COMM_BODY) == han_only(xml)
+    assert_well_formed(xml)
+
+
+def test_ai_parallel_punctuates_inside_comm_note_without_stamp():
+    """Comm segments are punctuated *inside* the note — never wrapped or reflowed."""
+    segments = list_segments(INLINE_COMM_BODY)["segments"]
+    comm_seg = segments[1]
+    post_note = segments[2]
+
+    result = apply_ai_parallel_segments(
+        INLINE_COMM_BODY,
+        [
+            {
+                "parallel_text": "己，庚\n\n辛。",
+                "han_start": comm_seg["han_start"],
+                "han_end": comm_seg["han_end"],
+            },
+            {
+                "parallel_text": "壬癸。子丑，寅卯辰巳午未。",
+                "han_start": post_note["han_start"],
+                "han_end": post_note["han_end"],
+            },
+        ],
+        reflow=True,
+    )
+    xml = result["body_xml"]
+
+    assert result["stats"]["segments_applied"] == 2
+    assert result["stats"]["align_failed"] == 0
+    # Marks inside the note; no <seg> stamp and no </p><p> split within it.
+    assert '<note type="comm">己，庚辛。</note>' in xml
+    assert "ljb:parallel-punct\">己" not in xml
+    assert xml.count("<note") == 1 and xml.count("</note>") == 1
+    # Post-note text segment still stamped as parallel-punct.
+    assert '<seg type="ljb:parallel-punct">壬癸。' in xml
+    assert han_only(INLINE_COMM_BODY) == han_only(xml)
+    assert_well_formed(xml)
+
+
 def test_coverage_from_punctuation_empty():
     from kanripo_import.ai_punct import coverage_from_punctuation
 

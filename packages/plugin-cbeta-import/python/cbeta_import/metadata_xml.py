@@ -201,6 +201,51 @@ def _text(el: etree._Element | None) -> str:
     return "".join(el.itertext()).strip() if el is not None else ""
 
 
+def _work_title(title_stmt: etree._Element | None) -> str:
+    """The work title out of CBETA's multi-``<title>`` ``<titleStmt>``.
+
+    A real CBETA header stacks several: ``level="s"`` series titles
+    (*Taishō Tripiṭaka* / 大正新脩大藏經), then ``level="m"`` for the work
+    itself (高僧傳), then unlevelled *"…, No. 2059 高僧傳"* forms. Take the
+    monograph-level title; fall back to a "No. …"-prefixed one (stripped of
+    that prefix), then any non-series title, then the first title.
+    """
+    if title_stmt is None:
+        return ""
+    titles = title_stmt.findall(f"{_TEI}title")
+    if not titles:
+        return ""
+    by_level = lambda lv: next(  # noqa: E731
+        (t for t in titles if (t.get("level") or "") == lv and _text(t)), None
+    )
+    monogr = by_level("m")
+    if monogr is not None:
+        return clean_title(_text(monogr))
+    no_form = next(
+        (t for t in titles if re.search(r"No\.\s*\S", _text(t))), None
+    )
+    if no_form is not None:
+        return clean_title(_text(no_form))
+    non_series = next(
+        (t for t in titles if (t.get("level") or "") != "s" and _text(t)), None
+    )
+    return clean_title(_text(non_series if non_series is not None else titles[0]))
+
+
+def _idno_vol_no(header: etree._Element) -> tuple[str, str]:
+    """``(vol, no)`` from ``<publicationStmt>``'s structured CBETA ``<idno>``."""
+    for idno in header.iter(f"{_TEI}idno"):
+        if idno.get("type") != "CBETA":
+            continue
+        parts = {
+            child.get("type"): (child.text or "").strip()
+            for child in idno.iter(f"{_TEI}idno")
+        }
+        if parts.get("vol") or parts.get("no"):
+            return parts.get("vol", ""), parts.get("no", "")
+    return "", ""
+
+
 def extract_from_header(tree: etree._ElementTree | etree._Element, work_id: str) -> WorkMeta:
     root = tree.getroot() if isinstance(tree, etree._ElementTree) else tree
     header = root.find(f".//{_TEI}teiHeader")
@@ -208,8 +253,7 @@ def extract_from_header(tree: etree._ElementTree | etree._Element, work_id: str)
     if header is None:
         return meta
 
-    title_el = header.find(f".//{_TEI}titleStmt/{_TEI}title")
-    meta.title = clean_title(_text(title_el))
+    meta.title = _work_title(header.find(f".//{_TEI}titleStmt"))
 
     author_el = header.find(f".//{_TEI}titleStmt/{_TEI}author")
     meta.byline_raw = _text(author_el)
@@ -222,6 +266,10 @@ def extract_from_header(tree: etree._ElementTree | etree._Element, work_id: str)
     m = _BIBL_VOL_NO.search(bibl)
     if m:
         meta.taisho_vol, meta.taisho_no = m.group(1), m.group(2)
+    else:
+        vol, no = _idno_vol_no(header)
+        if vol or no:
+            meta.taisho_vol, meta.taisho_no = vol, no
 
     extent = _text(header.find(f".//{_TEI}extent"))
     em = _EXTENT_JUAN.search(extent)

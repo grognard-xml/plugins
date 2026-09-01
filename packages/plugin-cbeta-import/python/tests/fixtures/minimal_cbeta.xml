@@ -12,7 +12,7 @@
       <charDecl>
         <char xml:id="CB99999">
           <charName>TEST GAIJI</charName>
-          <mapping type="unicode">𡸀</mapping>
+          <mapping type="unicode">U+21E00</mapping>
         </char>
       </charDecl>
     </encodingDesc>
@@ -24,7 +24,7 @@
       <lb n="0001a01" ed="T"/><cb:docNumber>No. 9999</cb:docNumber>
       <lb n="0001a02" ed="T"/><cb:juan n="001" fun="open"><cb:mulu n="001" type="卷"/><cb:jhead><title>測試經</title>卷第一</cb:jhead></cb:juan>
       <lb n="0001a03" ed="T"/><p xml:id="p0001a0301" style="margin-left:1em;text-indent:-1em">如是我聞。一時佛在
-      <lb n="0001a04" ed="T"/>王舍<anchor xml:id="beg0001001"/>城<anchor xml:id="end0001001"/>中。與大比丘眾<g ref="#CB99999">𡸀</g>俱。
+      <lb n="0001a04" ed="T"/>王舍<anchor xml:id="beg0001001"/>城<anchor xml:id="end0001001"/>中。與大比丘眾<g ref="#CB99999"/>俱。
       <note n="0001001" resp="Taisho" type="orig" place="foot text">城＝域【宋】</note>
       <note n="0001001" resp="CBETA" type="mod">城【大】，域【宋】</note></p>
       <cb:juan n="001" fun="close"><cb:jhead><title>測試經</title>卷第一</cb:jhead></cb:juan>

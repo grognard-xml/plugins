@@ -13,8 +13,14 @@ from xml.etree import ElementTree as ET
 
 HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
 PUNCT_CHARS = set("。，、：；？！「」『』（）〔〕.,;:!?")
-SEG_ANA = "ljb:parallel-punct"
-SEG_OPEN = f'<seg ana="{SEG_ANA}">'
+# Marker for a stretch whose punctuation was copied from a parallel witness.
+# Carried on `<seg type="…">`, not `@ana`: the CBETA P5 customization drops
+# `att.global.analytic` entirely (no `@ana` on any element), and even in
+# TEI-all `@ana` is `data.pointer` — a bare token like this is not a valid
+# value there. `type` is `data.name`, which `ljb:parallel-punct` satisfies,
+# and it is allowed on `<seg>` in both schemas.
+SEG_MARK = "ljb:parallel-punct"
+SEG_OPEN = f'<seg type="{SEG_MARK}">'
 NOTE_RE = re.compile(r"<note\b[^>]*>.*?</note>", re.DOTALL)
 NOTE_OPEN_COMM_RE = re.compile(r'<note\b[^>]*\btype="comm"[^>]*>', re.I)
 NOTE_CLOSE_RE = re.compile(r"</note>")
@@ -23,7 +29,9 @@ INLINE_COMM_RE = re.compile(r'<span\b[^>]*\bclass="inlinecomment"[^>]*>(.*?)</sp
 WIKISOURCE_COMM_RE = re.compile(r"〈[^〉]*〉")
 PB_RE = re.compile(r"<pb\b[^>]*/>")
 TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
-SEG_OPEN_RE = re.compile(r'<seg\b[^>]*\bana="[^"]*\bljb:parallel-punct[^"]*"[^>]*>')
+# Accept legacy `ana="…"` too, so coverage can still be rebuilt from files
+# imported before the switch to `type`.
+SEG_OPEN_RE = re.compile(r'<seg\b[^>]*\b(?:type|ana)="[^"]*\bljb:parallel-punct[^"]*"[^>]*>')
 MIN_BLOCK = 8
 MIN_STICKER_COVER = 0.8
 MAX_TAPE_GAP = 20
@@ -1052,7 +1060,8 @@ def apply_parallel_segmented_sources(
 
 
 def coverage_from_stamps(body_xml: str) -> Coverage:
-    """Rebuild coverage from existing ``ana="ljb:parallel-punct"`` stretches."""
+    """Rebuild coverage from existing ``type="ljb:parallel-punct"`` stretches
+    (legacy ``ana="…"`` stamps are still recognised)."""
     atoms = _iter_xml_atoms(body_xml)
     tape, _ = _han_tape(atoms)
     total = len(tape)
@@ -1093,6 +1102,40 @@ def coverage_from_stamps(body_xml: str) -> Coverage:
 MIN_AI_HAN_MAP_RATIO = 0.75
 
 
+def _align_parallel_to_scoped_sub(
+    parallel_text: str,
+    tape: str,
+    tape_start: int,
+    tape_end: int,
+    *,
+    min_map_ratio: float = MIN_AI_HAN_MAP_RATIO,
+) -> tuple[str, str]:
+    """Trim LLM parallel text when it includes context outside a scoped Han range.
+
+    AI models often return the full punctuated passage even when the prompt
+    covered only a selection. Without trimming, ``_sticker_to_tape_map`` maps
+    from sticker index 0 and the ``min_map_ratio`` gate rejects the transfer.
+    """
+    sub = tape[tape_start:tape_end]
+    sticker = han_only(parallel_text)
+    if not sticker or not sub:
+        return parallel_text, sticker
+    mapping = _sticker_to_tape_map(sticker, tape, tape_start, tape_end)
+    if len(mapping) / len(sticker) >= min_map_ratio:
+        return parallel_text, sticker
+    overlap = find_han_overlap(sticker, sub)
+    if overlap is None:
+        return parallel_text, sticker
+    off_start, off_end = overlap
+    if off_end - off_start < len(sub) * min_map_ratio:
+        return parallel_text, sticker
+    trimmed_parallel = _slice_text_by_han_range(parallel_text, off_start, off_end)
+    trimmed_sticker = han_only(trimmed_parallel)
+    if not trimmed_sticker:
+        return parallel_text, sticker
+    return trimmed_parallel, trimmed_sticker
+
+
 def _normalize_parallel_match_text(parallel_text: str) -> str:
     match_text = parallel_text
     if INLINE_COMM_RE.search(parallel_text):
@@ -1109,7 +1152,17 @@ def _apply_parallel_at_range(
     tape: str,
     tape_start: int,
     tape_end: int,
+    *,
+    segmented: bool = False,
 ) -> tuple[str, tuple[int, int] | None, str]:
+    """Copy ``match_text`` punctuation onto ``body_xml`` over Han range ``[tape_start, tape_end)``.
+
+    ``segmented=True`` walks the body with :func:`_iter_xml_atoms_segmented` so the
+    Han index space matches ``list_segments`` (``<note type="comm">`` innards are
+    counted). In that mode marks may land *inside* a comm note, but the
+    ``<seg type="ljb:parallel-punct">`` stamp and ``</p><p>`` reflow splits are
+    suppressed there — commentary is punctuated, never wrapped or reflowed.
+    """
     insertions, para_after = _collect_insertions(
         match_text,
         tape,
@@ -1118,7 +1171,7 @@ def _apply_parallel_at_range(
         sticker,
         split_sentences=False,
     )
-    atoms = _iter_xml_atoms(body_xml)
+    atoms = _iter_xml_atoms_segmented(body_xml) if segmented else _iter_xml_atoms(body_xml)
     out: list[str] = []
     han_seen = -1
     opened_here = 0
@@ -1127,6 +1180,7 @@ def _apply_parallel_at_range(
     skip_until = -1
     reflow_start = tape_start
     reflow_end = tape_end
+    comm_note_depth = 0
 
     def close_stamp_at_boundary(atom: str) -> bool:
         return (
@@ -1148,11 +1202,23 @@ def _apply_parallel_at_range(
         if close_stamp_at_boundary(atom) and opened_here > 0:
             opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
 
+        if segmented:
+            if NOTE_OPEN_COMM_RE.fullmatch(atom):
+                comm_note_depth += 1
+            elif atom == "</note>" and comm_note_depth > 0:
+                comm_note_depth -= 1
+        in_comm_note = comm_note_depth > 0
+
         is_han = (not _is_markup(atom)) and HAN_RE.fullmatch(atom)
         stamp_depth, other_seg_depth = _stamp_depth_delta(atom, stamp_depth, other_seg_depth)
         if is_han:
             han_seen += 1
-            if han_seen == tape_start and stamp_depth == 0 and opened_here == 0:
+            if (
+                han_seen == tape_start
+                and stamp_depth == 0
+                and opened_here == 0
+                and not in_comm_note
+            ):
                 out.append(SEG_OPEN)
                 opened_here += 1
                 stamp_depth += 1
@@ -1161,7 +1227,11 @@ def _apply_parallel_at_range(
             extra = insertions.get(han_seen, "")
             if extra:
                 out.append(extra)
-            if han_seen in para_after and not _comm_note_follows(atoms, atom_index):
+            if (
+                han_seen in para_after
+                and not in_comm_note
+                and not _comm_note_follows(atoms, atom_index)
+            ):
                 before_len = len(out)
                 opened_here, stamp_depth = _emit_paragraph_split(
                     out, opened_here, stamp_depth, atoms, atom_index
@@ -1192,8 +1262,15 @@ def apply_scoped_parallel_punctuation(
     *,
     min_map_ratio: float = MIN_AI_HAN_MAP_RATIO,
 ) -> ParallelPunctResult:
-    """Apply parallel punct on a known Han range (AI segments — skip global overlap search)."""
-    atoms = _iter_xml_atoms(body_xml)
+    """Apply parallel punct on a known Han range (AI segments — skip global overlap search).
+
+    ``tape_start`` / ``tape_end`` come from ``list_segments``, whose Han index
+    space counts ``<note type="comm">`` innards — so the tape here is built the
+    same way (:func:`_iter_xml_atoms_segmented`). Using the note-collapsed
+    :func:`_iter_xml_atoms` here shifts every segment that follows an inline comm
+    note and drops it at the ``min_map_ratio`` gate.
+    """
+    atoms = _iter_xml_atoms_segmented(body_xml)
     tape, _ = _han_tape(atoms)
     total = len(tape)
     empty: ParallelPunctResult = {
@@ -1204,14 +1281,16 @@ def apply_scoped_parallel_punctuation(
     if tape_start < 0 or tape_end > total or tape_start >= tape_end:
         return empty
     match_text = _normalize_parallel_match_text(parallel_text)
-    sticker = han_only(match_text)
+    match_text, sticker = _align_parallel_to_scoped_sub(
+        match_text, tape, tape_start, tape_end, min_map_ratio=min_map_ratio
+    )
     if not sticker:
         return empty
     mapping = _sticker_to_tape_map(sticker, tape, tape_start, tape_end)
     if len(mapping) / len(sticker) < min_map_ratio:
         return empty
     final_xml, overlap, preview = _apply_parallel_at_range(
-        body_xml, match_text, sticker, tape, tape_start, tape_end
+        body_xml, match_text, sticker, tape, tape_start, tape_end, segmented=True
     )
     if overlap is None:
         return empty
@@ -1459,6 +1538,24 @@ def enrich_parallel_result(
     return result
 
 
+# CBETA body fragments extracted from a full TEI file keep ``cb:`` prefixes on
+# elements but drop the ``xmlns:cb`` declaration (it lives on ``<TEI>``).  A
+# naive wrap-for-parse then rejects otherwise valid punctuation output.
+_CBETA_NS = "http://www.cbeta.org/ns/1.0"
+_TEI_NS = "http://www.tei-c.org/ns/1.0"
+
+
+def _parse_fragment(xml: str) -> ET.Element:
+    """Parse a body fragment, declaring namespaces the fragment still uses."""
+    attrs: list[str] = []
+    if "cb:" in xml:
+        attrs.append(f'xmlns:cb="{_CBETA_NS}"')
+    if "cb:" in xml and re.search(r"<(?:p|div|note|milestone|lb|pb|seg|g|anchor)\b", xml):
+        attrs.append(f'xmlns="{_TEI_NS}"')
+    attr = f" {' '.join(attrs)}" if attrs else ""
+    return ET.fromstring(f"<root{attr}>{xml}</root>")
+
+
 def assert_well_formed(xml: str) -> None:
     """Raise if ``xml`` is not a well-formed fragment (wrapped for parse)."""
-    ET.fromstring(f"<root>{xml}</root>")
+    _parse_fragment(xml)

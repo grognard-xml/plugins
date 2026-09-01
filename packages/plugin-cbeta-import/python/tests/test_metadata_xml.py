@@ -52,6 +52,36 @@ class ExtractFromHeaderTest(unittest.TestCase):
         self.assertEqual(meta.taisho_vol, "99")
         self.assertEqual(meta.taisho_no, "9999")
 
+    def test_real_cbeta_multi_title_header(self):
+        # A real CBETA <titleStmt> stacks series / monograph / "No. …" titles;
+        # the work title is the monograph (level="m") one, not the first
+        # (series) title, and vol/no come from the structured <idno>.
+        work = "高僧傳"  # 高僧傳
+        author = "慕皕"  # not the real name; just two Han chars
+        xml = (
+            '<TEI xmlns="http://www.tei-c.org/ns/1.0"><teiHeader><fileDesc>'
+            "<titleStmt>"
+            '<title level="s">Taisho Tripitaka</title>'
+            '<title level="s" xml:lang="zh-Hant">大藏經</title>'
+            f'<title level="m" xml:lang="zh-Hant">{work}</title>'
+            f'<title>Taisho Tripitaka, Electronic version, No. 2059 {work}</title>'
+            f"<author>梁 {author}撰</author>"
+            "</titleStmt>"
+            "<extent>14卷</extent>"
+            '<publicationStmt><idno type="CBETA">'
+            '<idno type="canon">T</idno>.<idno type="vol">50</idno>'
+            '.<idno type="no">2059</idno>'
+            "</idno></publicationStmt>"
+            "<sourceDesc><bibl>x</bibl></sourceDesc>"
+            "</fileDesc></teiHeader></TEI>"
+        )
+        meta = metadata_xml.extract_from_header(etree.fromstring(xml.encode()), "T50n2059")
+        self.assertEqual(meta.title, work)
+        self.assertEqual(meta.dynasty, "梁")
+        self.assertEqual([c.person_name for c in meta.contributors], [author])
+        self.assertEqual((meta.taisho_vol, meta.taisho_no), ("50", "2059"))
+        self.assertEqual(meta.juan_count, 14)
+
 
 class WorkInfoEnrichmentTest(unittest.TestCase):
     def setUp(self):
