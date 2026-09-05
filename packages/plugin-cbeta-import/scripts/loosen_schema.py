@@ -54,7 +54,7 @@ A = "http://relaxng.org/ns/compatibility/annotations/1.0"
 _R = f"{{{RNG}}}"
 _A = f"{{{A}}}"
 
-MARKER = "grognard-cbeta-loosen v2"
+MARKER = "ljb-cbeta-loosen v2"
 
 RNG_NS_URI = RNG  # relaxng structure ns (for building <name> patterns)
 CBETA_NS_URI = "http://www.cbeta.org/ns/1.0"
