@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 def plugin_root() -> Path:
-    env = os.environ.get("LJB_PLUGIN_INSTALL_PATH", "").strip()
+    env = os.environ.get("GROGNARD_PLUGIN_INSTALL_PATH", "").strip()
     if env:
         return Path(env)
     return Path(__file__).resolve().parents[2]

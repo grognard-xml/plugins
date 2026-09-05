@@ -1,6 +1,6 @@
 /**
- * LJB plugin manifest types (manifestVersion 1.0.0).
- * Consumed by the plugin host in lejeanbaptiste and by packages in this repo.
+ * Grognard plugin manifest types (manifestVersion 1.0.0).
+ * Consumed by the plugin host in grognard and by packages in this repo.
  */
 
 /** @typedef {'1.0.0'} PluginManifestVersion */
@@ -96,7 +96,7 @@
  * @property {string} [author]
  * @property {string} [homepage]
  * @property {string} license
- * @property {{ minVersion: string, maxVersion?: string }} ljb
+ * @property {{ minVersion: string, maxVersion?: string }} grognard
  * @property {string[]} [languages]
  * @property {PluginRegion[]} [regions]
  * @property {{ message: string, documentLanguages?: string[] }} [languagePrompt]

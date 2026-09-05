@@ -1,6 +1,6 @@
-# LJB plugin manifest (v1.0.0)
+# Grognard plugin manifest (v1.0.0)
 
-Each plugin is a folder under `packages/` containing a **`plugin.manifest.json`**. The LJB desktop app reads this file when a plugin is installed under the user’s plugins directory.
+Each plugin is a folder under `packages/` containing a **`plugin.manifest.json`**. The Grognard desktop app reads this file when a plugin is installed under the user’s plugins directory.
 
 ## File location
 
@@ -28,12 +28,12 @@ npm run validate
 | `version` | yes | Plugin package semver. |
 | `description` | yes | Short summary. |
 | `license` | yes | SPDX license id. |
-| `ljb.minVersion` | yes | Minimum LJB version. |
+| `grognard.minVersion` | yes | Minimum Grognard version. |
 | `entry` | yes | How the host loads the plugin (see below). |
 | `languages` | no | BCP 47 tags for language-based discovery prompts. |
 | `regions` | no | `east-asia`, `china`, `japan`, `korea`. |
 | `languagePrompt` | no | Message when a matching document language is opened. |
-| `contributions` | no | What the plugin registers with LJB. |
+| `contributions` | no | What the plugin registers with Grognard. |
 | `dependencies.plugins` | no | Other plugin ids required first. |
 | `bundled` | no | Paths included in the install archive. |
 
@@ -41,7 +41,7 @@ npm run validate
 
 | `entry.kind` | Meaning |
 |--------------|---------|
-| `javascript` | Bundled `register.mjs` hooks into LJB (auto-tagging, menus). |
+| `javascript` | Bundled `register.mjs` hooks into Grognard (auto-tagging, menus). |
 | `python` | IPC backend only (like Sanmiao today). |
 | `hybrid` | Both JS registration and a Python backend. |
 
@@ -52,7 +52,7 @@ Example (hybrid):
   "kind": "hybrid",
   "module": "dist/register.mjs",
   "python": {
-    "module": "sanmiao.ljb_bridge",
+    "module": "sanmiao.grognard_bridge",
     "runtime": "bundled",
     "runtimePath": "python"
   }
@@ -61,7 +61,7 @@ Example (hybrid):
 
 ## Contributions
 
-Plugins declare **what they offer**; the LJB host decides **how to wire it**.
+Plugins declare **what they offer**; the Grognard host decides **how to wire it**.
 
 ### `toolsMenu`
 
@@ -80,7 +80,7 @@ The host dispatches `action` to the plugin’s JS entry.
 
 ### `autoTagging`
 
-Producers shown in the auto-tagging dialog. Each becomes a `Suggestion` source in the unified pipeline (see LJB `docs/Auto-tagging.md`).
+Producers shown in the auto-tagging dialog. Each becomes a `Suggestion` source in the unified pipeline (see Grognard `docs/Auto-tagging.md`).
 
 Kinds:
 
@@ -123,7 +123,7 @@ Norbert example (pulls from authoritypacks release):
 
 ### `disambiguation`
 
-Strategies shown in the disambiguation panel. Norbert uses `usesContextKeys` to document dynasty/office/place context — the LJB equivalent of your `<person>` wrapper logic without requiring that custom XML in the final corpus.
+Strategies shown in the disambiguation panel. Norbert uses `usesContextKeys` to document dynasty/office/place context — the Grognard equivalent of your `<person>` wrapper logic without requiring that custom XML in the final corpus.
 
 ### `settingsSections`
 
@@ -148,7 +148,7 @@ Optional sections added to the Settings dialog when the plugin is enabled.
 
 Machine-readable schema: [`schema/plugin-manifest.schema.json`](../schema/plugin-manifest.schema.json)
 
-Validation: `@ljb/plugin-sdk` (`packages/plugin-sdk/validate.mjs`).
+Validation: `@grognard/plugin-sdk` (`packages/plugin-sdk/validate.mjs`).
 
 ## Current plugins
 
@@ -159,7 +159,7 @@ Validation: `@ljb/plugin-sdk` (`packages/plugin-sdk/validate.mjs`).
 | `kanripo-import` | `plugin-kanripo-import` | Kanripo Mandoku → TEI, gaiji, parallel punctuation, metadata |
 | `daozang-import` | `plugin-daozang-import` | Bundled Fang Tongzi Daozang corpus, local search + TEI import |
 
-Hybrid import plugins (`kanripo-import`, `daozang-import`) ship a thin `dist/register.mjs` that loads dialog UI from the LJB host (`kanripo-import-ui` / `daozang-import-ui` modules in the editor package). The host must be **LJB 0.1.0-beta.4** or newer for those imports.
+Hybrid import plugins (`kanripo-import`, `daozang-import`) ship a thin `dist/register.mjs` that loads dialog UI from the Grognard host (`kanripo-import-ui` / `daozang-import-ui` modules in the editor package). The host must be **Grognard 0.1.0-beta.4** or newer for those imports.
 
 ## Release checklist
 

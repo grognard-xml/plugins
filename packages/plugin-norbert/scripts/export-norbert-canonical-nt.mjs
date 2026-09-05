@@ -44,7 +44,7 @@ if (!sqlPath || !fs.existsSync(sqlPath)) {
 }
 
 const defaultPersonsPath =
-  '/Users/daniel/Library/Application Support/Le Jean-Baptiste/authority-assets/authority-packs/norbert/persons.ndjson';
+  '/Users/daniel/Library/Application Support/Grognard/authority-assets/authority-packs/norbert/persons.ndjson';
 const personsPath = arg('--persons', defaultPersonsPath);
 if (!fs.existsSync(personsPath)) {
   throw new Error(

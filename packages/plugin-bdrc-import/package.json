@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-bdrc-import",
+  "name": "@grognard/plugin-bdrc-import",
   "version": "0.1.0",
   "private": true,
-  "description": "BDRC etext volume → project TEI plugin for LJB (browser-extension driven, live PDI fetch)",
-  "ljbPlugin": true,
+  "description": "BDRC etext volume → project TEI plugin for Grognard (browser-extension driven, live PDI fetch)",
+  "grognardPlugin": true,
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs",

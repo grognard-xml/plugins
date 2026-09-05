@@ -17,9 +17,9 @@ PUNCT_CHARS = set("。，、：；？！「」『』（）〔〕.,;:!?")
 # Carried on `<seg type="…">`, not `@ana`: the CBETA P5 customization drops
 # `att.global.analytic` entirely (no `@ana` on any element), and even in
 # TEI-all `@ana` is `data.pointer` — a bare token like this is not a valid
-# value there. `type` is `data.name`, which `ljb:parallel-punct` satisfies,
+# value there. `type` is `data.name`, which `grognard:parallel-punct` satisfies,
 # and it is allowed on `<seg>` in both schemas.
-SEG_MARK = "ljb:parallel-punct"
+SEG_MARK = "grognard:parallel-punct"
 SEG_OPEN = f'<seg type="{SEG_MARK}">'
 NOTE_RE = re.compile(r"<note\b[^>]*>.*?</note>", re.DOTALL)
 NOTE_OPEN_COMM_RE = re.compile(r'<note\b[^>]*\btype="comm"[^>]*>', re.I)
@@ -1060,7 +1060,7 @@ def apply_parallel_segmented_sources(
 
 
 def coverage_from_stamps(body_xml: str) -> Coverage:
-    """Rebuild coverage from existing ``type="ljb:parallel-punct"`` stretches
+    """Rebuild coverage from existing ``type="grognard:parallel-punct"`` stretches
     (legacy ``ana="…"`` stamps are still recognised)."""
     atoms = _iter_xml_atoms(body_xml)
     tape, _ = _han_tape(atoms)
@@ -1160,7 +1160,7 @@ def _apply_parallel_at_range(
     ``segmented=True`` walks the body with :func:`_iter_xml_atoms_segmented` so the
     Han index space matches ``list_segments`` (``<note type="comm">`` innards are
     counted). In that mode marks may land *inside* a comm note, but the
-    ``<seg type="ljb:parallel-punct">`` stamp and ``</p><p>`` reflow splits are
+    ``<seg type="grognard:parallel-punct">`` stamp and ``</p><p>`` reflow splits are
     suppressed there — commentary is punctuated, never wrapped or reflowed.
     """
     insertions, para_after = _collect_insertions(
@@ -1421,7 +1421,7 @@ def apply_parallel_sources(
 
 
 def _text_inside_stamps(body_xml: str) -> str:
-    """Concatenate visible text inside ``ljb:parallel-punct`` segs."""
+    """Concatenate visible text inside ``grognard:parallel-punct`` segs."""
     parts: list[str] = []
     stamp_depth = 0
     other_seg_depth = 0

@@ -46,19 +46,19 @@ if (!parallelPath && !ctextUrl && !wikisourceUrl) {
 }
 
 const hostPython = [
-  process.env.LJB_PYTHON,
+  process.env.GROGNARD_PYTHON,
   path.resolve(packageRoot, '../../../leaf-writer/apps/desktop/resources/python/bin/python3'),
-  path.resolve(packageRoot, '../../../lejeanbaptiste/apps/desktop/resources/python/bin/python3'),
+  path.resolve(packageRoot, '../../../grognard/apps/desktop/resources/python/bin/python3'),
 ].find((candidate) => candidate && fs.existsSync(candidate));
 
 if (!hostPython) {
-  console.error('Bundled LJB Python not found (set LJB_PYTHON).');
+  console.error('Bundled Grognard Python not found (set GROGNARD_PYTHON).');
   process.exit(1);
 }
 
 const env = {
   ...process.env,
-  LJB_PLUGIN_INSTALL_PATH: packageRoot,
+  GROGNARD_PLUGIN_INSTALL_PATH: packageRoot,
   PYTHONPATH: path.join(packageRoot, 'python'),
 };
 

@@ -14,7 +14,7 @@ from kanripo_import.kanripo_gaiji import (
 from kanripo_import.kanripo_tei import convert_kanripo_txt
 
 PACKAGE_ROOT = Path(__file__).resolve().parents[2]
-os.environ.setdefault("LJB_PLUGIN_INSTALL_PATH", str(PACKAGE_ROOT))
+os.environ.setdefault("GROGNARD_PLUGIN_INSTALL_PATH", str(PACKAGE_ROOT))
 
 
 def test_bundled_table_resolves_unicode_gaiji() -> None:
@@ -49,7 +49,7 @@ def test_convert_minimal_fixture(tmp_path: Path) -> None:
 
 
 def test_convert_copies_bundled_gaiji_png(tmp_path: Path) -> None:
-    os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(PACKAGE_ROOT)
+    os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(PACKAGE_ROOT)
     from kanripo_import import kanripo_gaiji as gaiji_mod
 
     gaiji_mod.default_table.cache_clear()

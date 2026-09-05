@@ -1,8 +1,8 @@
 /**
- * Kanripo import plugin entry. UI lives in the LJB host webpack bundle.
+ * Kanripo import plugin entry. UI lives in the Grognard host webpack bundle.
  */
 
-/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
+/** @typedef {import('@grognard/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
 
 const HOST_UI_MODULE = 'kanripo-import-ui';
 

@@ -1,9 +1,9 @@
 /**
- * CBETA import plugin entry. UI lives in the LJB host webpack bundle
+ * CBETA import plugin entry. UI lives in the Grognard host webpack bundle
  * (packages/cwrc-leafwriter/src/plugins/hostModules/cbetaImportUi.ts — TODO).
  */
 
-/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
+/** @typedef {import('@grognard/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
 
 const HOST_UI_MODULE = 'cbeta-import-ui';
 

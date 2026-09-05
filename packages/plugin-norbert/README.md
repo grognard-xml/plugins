@@ -1,6 +1,6 @@
 # Norbert (`norbert`)
 
-Premodern Chinese prosopography for LJB.
+Premodern Chinese prosopography for Grognard.
 
 ## Person-name split (pass 2)
 
@@ -180,8 +180,8 @@ from the review workflow in this plugin, not copied directly from the SQL dump.
 That keeps the runtime pack portable while still preserving the Norbert + wiki
 crosswalk needed for tagging and disambiguation.
 
-At runtime these rows are wrapped in the LJB `AuthorityCandidate` envelope but
-remain structured and compact. LJB expands their fief, rank, posthumous name,
+At runtime these rows are wrapped in the Grognard `AuthorityCandidate` envelope but
+remain structured and compact. Grognard expands their fief, rank, posthumous name,
 and personal-name combinations when the `norbert-wiki-nt` pack is loaded. The
 runtime keeps full person-wrapper strings separate from standalone noble-title
 strings, so a title-only hit cannot create a person wrapper. Rows with no
@@ -191,11 +191,11 @@ same run, its current alternate names are merged by Norbert person ID before
 the wiki-title combinations are generated.
 
 The plugin owns Norbert's position-sensitive office rule. When a resolved
-office marked `followsOffice` immediately follows another resolved office, LJB
+office marked `followsOffice` immediately follows another resolved office, Grognard
 retains the first as the inferred parent of the second and writes a
 provenance-bearing `parentOf` assertion to `entities.xml`. Place + office
 constructions remain contextual tagging and do not become office hierarchy.
 
-## Enable in LJB
+## Enable in Grognard
 
 Tools → Plugins → enable **Norbert**, then use entity lookup to mint a new person.

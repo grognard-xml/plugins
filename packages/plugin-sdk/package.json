@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-sdk",
+  "name": "@grognard/plugin-sdk",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "LJB plugin manifest types and validation",
+  "description": "Grognard plugin manifest types and validation",
   "exports": {
     ".": "./index.mjs",
     "./register-context": "./register-context.mjs"

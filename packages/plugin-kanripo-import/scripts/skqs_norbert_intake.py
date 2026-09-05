@@ -25,7 +25,7 @@ from kanripo_import.chinese_name_split import segment_person_name
 from kanripo_import.norbert_dynasty_map import norbert_court_id
 from kanripo_import.person_name_normalize import clean_skqs_person_name
 
-CREATED_BY = "LJB_SKQS"
+CREATED_BY = "GROGNARD_SKQS"
 NAME_TYPE_FAMILY = 0
 NAME_TYPE_GIVEN = 1
 
@@ -335,7 +335,7 @@ def recover_overrides() -> None:
         )
 
     if not recovered:
-        raise SystemExit("No LJB_SKQS persons matched pending unresolved authors.")
+        raise SystemExit("No GROGNARD_SKQS persons matched pending unresolved authors.")
 
     fieldnames = ["person_name", "dynasty", "norbert_id", "note", "sample_kr_id"]
     overrides_path.parent.mkdir(parents=True, exist_ok=True)
@@ -346,7 +346,7 @@ def recover_overrides() -> None:
             writer.writerow(row)
     print(f"Recovered {len(recovered)} Norbert overrides → {overrides_path}")
     if unmatched:
-        print(f"Warning: {len(unmatched)} LJB_SKQS persons did not match unresolved list:")
+        print(f"Warning: {len(unmatched)} GROGNARD_SKQS persons did not match unresolved list:")
         for item in unmatched[:5]:
             print(f"  {item}")
         if len(unmatched) > 5:
@@ -363,7 +363,7 @@ def main() -> None:
     parser.add_argument(
         "--recover-overrides",
         action="store_true",
-        help="Rebuild overrides CSV from Norbert (created_by=LJB_SKQS)",
+        help="Rebuild overrides CSV from Norbert (created_by=GROGNARD_SKQS)",
     )
     args = parser.parse_args()
     if args.recover_overrides:

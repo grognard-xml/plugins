@@ -1,4 +1,4 @@
-name: Build LJB plugins
+name: Build Grognard plugins
 
 on:
   push:
@@ -22,10 +22,10 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Check out LJB host (import plugin smoke tests)
+      - name: Check out Grognard host (import plugin smoke tests)
         uses: actions/checkout@v4
         with:
-          repository: lejeanbaptiste/lejeanbaptiste
+          repository: grognard/grognard
           path: leaf-writer
           fetch-depth: 1
       - name: Set up Python
@@ -41,7 +41,7 @@ jobs:
       - name: Build plugin archives
         run: npm run release
         env:
-          LJB_HOST_ROOT: ${{ github.workspace }}/leaf-writer
+          GROGNARD_HOST_ROOT: ${{ github.workspace }}/leaf-writer
       - name: Create or update GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: ncipollo/release-action@v1

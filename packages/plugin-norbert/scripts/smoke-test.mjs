@@ -9,7 +9,7 @@ const packageRoot = path.join(__dirname, '..');
 const registerPath = path.join(packageRoot, 'dist/register.mjs');
 
 if (!fs.existsSync(registerPath)) {
-  console.error('dist/register.mjs missing — run: npm run build -w @ljb/plugin-norbert');
+  console.error('dist/register.mjs missing — run: npm run build -w @grognard/plugin-norbert');
   process.exit(1);
 }
 

@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-norbert",
+  "name": "@grognard/plugin-norbert",
   "version": "0.1.0",
   "private": true,
-  "description": "Norbert Chinese prosopography plugin for LJB",
-  "ljbPlugin": true,
+  "description": "Norbert Chinese prosopography plugin for Grognard",
+  "grognardPlugin": true,
   "type": "module",
   "dependencies": {
     "opencc-js": "^1.0.5",

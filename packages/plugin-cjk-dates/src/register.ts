@@ -1,11 +1,11 @@
 /**
  * East Asian dates plugin entry.
  *
- * UI is loaded from the LJB host (webpack bundle) via loadHostModule so the plugin
+ * UI is loaded from the Grognard host (webpack bundle) via loadHostModule so the plugin
  * package stays small and does not duplicate React/MUI dependencies.
  */
 
-/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
+/** @typedef {import('@grognard/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
 
 const HOST_UI_MODULE = 'cjk-dates-ui';
 

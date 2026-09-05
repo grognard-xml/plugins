@@ -120,15 +120,15 @@ class WorkInfoEnrichmentTest(unittest.TestCase):
             ),
             "utf-8",
         )
-        self._prev = os.environ.get("LJB_PLUGIN_INSTALL_PATH")
-        os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(root)
+        self._prev = os.environ.get("GROGNARD_PLUGIN_INSTALL_PATH")
+        os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(root)
         _paths.data_dir.cache_clear()
 
     def tearDown(self):
         if self._prev is None:
-            os.environ.pop("LJB_PLUGIN_INSTALL_PATH", None)
+            os.environ.pop("GROGNARD_PLUGIN_INSTALL_PATH", None)
         else:
-            os.environ["LJB_PLUGIN_INSTALL_PATH"] = self._prev
+            os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = self._prev
         _paths.data_dir.cache_clear()
         self._tmp.cleanup()
 

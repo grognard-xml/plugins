@@ -33,7 +33,7 @@ const runPythonInstall = (sourcePath, cacheRoot) => {
   });
   const result = spawnSync(
     'python3',
-    ['-c', 'from daozang_import.ljb_bridge import cli_main; cli_main()'],
+    ['-c', 'from daozang_import.grognard_bridge import cli_main; cli_main()'],
     {
       cwd: packageRoot,
       input: payload,
@@ -79,7 +79,7 @@ await fsp.rm(stagingCache, { recursive: true, force: true });
 
 const manifestPath = path.join(corpusRoot, 'manifest.json');
 const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
-manifest.packKind = 'ljb-daozang-bundled';
+manifest.packKind = 'grognard-daozang-bundled';
 manifest.bundled = true;
 await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 

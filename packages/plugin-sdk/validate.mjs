@@ -56,7 +56,7 @@ export function validatePluginManifest(manifest) {
 
   errors.push(...rejectUnknownKeys(m, [
     'manifestVersion', 'id', 'name', 'version', 'description', 'author', 'homepage',
-    'license', 'ljb', 'languages', 'regions', 'languagePrompt', 'entry',
+    'license', 'grognard', 'languages', 'regions', 'languagePrompt', 'entry',
     'contributions', 'dependencies', 'bundled',
   ], 'manifest'));
 
@@ -80,13 +80,13 @@ export function validatePluginManifest(manifest) {
   if (m.author != null) errors.push(...requireString(m.author, 'author'));
   if (m.homepage != null) errors.push(...requireString(m.homepage, 'homepage'));
 
-  if (!m.ljb || typeof m.ljb !== 'object') {
-    errors.push('ljb must be an object');
+  if (!m.grognard || typeof m.grognard !== 'object') {
+    errors.push('grognard must be an object');
   } else {
-    errors.push(...rejectUnknownKeys(/** @type {Record<string, unknown>} */ (m.ljb), ['minVersion', 'maxVersion'], 'ljb'));
-    errors.push(...requireString(/** @type {Record<string, unknown>} */ (m.ljb).minVersion, 'ljb.minVersion'));
-    if (/** @type {Record<string, unknown>} */ (m.ljb).maxVersion != null) {
-      errors.push(...requireString(/** @type {Record<string, unknown>} */ (m.ljb).maxVersion, 'ljb.maxVersion'));
+    errors.push(...rejectUnknownKeys(/** @type {Record<string, unknown>} */ (m.grognard), ['minVersion', 'maxVersion'], 'grognard'));
+    errors.push(...requireString(/** @type {Record<string, unknown>} */ (m.grognard).minVersion, 'grognard.minVersion'));
+    if (/** @type {Record<string, unknown>} */ (m.grognard).maxVersion != null) {
+      errors.push(...requireString(/** @type {Record<string, unknown>} */ (m.grognard).maxVersion, 'grognard.maxVersion'));
     }
   }
 

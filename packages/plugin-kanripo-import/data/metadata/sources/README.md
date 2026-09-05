@@ -43,7 +43,7 @@ python3 scripts/build-kanripo-metadata.py --sync-from /path/to/chinese_corpus_me
 npm run build:metadata
 ```
 
-Optional authority pack (auto-discovered in the LJB monorepo, or `--wikidata-pack` / `LJB_WIKIDATA_WORK_PACK`):
+Optional authority pack (auto-discovered in the Grognard monorepo, or `--wikidata-pack` / `GROGNARD_WIKIDATA_WORK_PACK`):
 
 ```bash
 python3 scripts/build-kanripo-metadata.py --sync-from /path/to/chinese_corpus_metadata

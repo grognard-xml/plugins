@@ -360,7 +360,7 @@ def main() -> None:
     )
 
     manifest = {
-        "packKind": "ljb-daozang-metadata",
+        "packKind": "grognard-daozang-metadata",
         "generatedAt": generated_at,
         "stats": {
             "works": len(entries),

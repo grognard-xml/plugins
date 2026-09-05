@@ -1,6 +1,6 @@
 """JSON stdin/stdout bridge for CBETA corpus sync and TEI conversion.
 
-ops (all optional ``cache_root`` overrides ``LJB_PLUGIN_CACHE_PATH``):
+ops (all optional ``cache_root`` overrides ``GROGNARD_PLUGIN_CACHE_PATH``):
   status              → corpus_sync.corpus_status()
   sync                → corpus_sync.sync_corpus(force?)
   install_from_source → corpus_sync.install_from_source(source_path)
@@ -21,11 +21,11 @@ from cbeta_import.cbeta_tei import convert_cbeta_work
 
 
 def _ensure_plugin_install_path() -> None:
-    if os.environ.get("LJB_PLUGIN_INSTALL_PATH", "").strip():
+    if os.environ.get("GROGNARD_PLUGIN_INSTALL_PATH", "").strip():
         return
     inferred = Path(__file__).resolve().parents[2]
     if (inferred / "data" / "metadata").is_dir():
-        os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(inferred)
+        os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(inferred)
 
 
 def _cache_root(payload: dict) -> Path | None:

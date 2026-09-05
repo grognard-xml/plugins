@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "description": "Clone Kanseki Repository (Kanripo) works and convert each juan to project TEI.",
   "author": "Daniel Patrick Morgan",
-  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-kanripo-import",
+  "homepage": "https://github.com/grognard/plugins/tree/main/packages/plugin-kanripo-import",
   "license": "GPL-2.0",
-  "ljb": {
+  "grognard": {
     "minVersion": "0.1.0"
   },
   "languages": ["zh-hant", "zh-hans", "lzh"],
@@ -20,7 +20,7 @@
     "kind": "hybrid",
     "module": "dist/register.mjs",
     "python": {
-      "module": "kanripo_import.ljb_bridge",
+      "module": "kanripo_import.grognard_bridge",
       "runtime": "system",
       "runtimePath": "python"
     }

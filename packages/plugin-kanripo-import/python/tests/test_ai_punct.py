@@ -421,10 +421,10 @@ def test_ai_parallel_punctuates_inside_comm_note_without_stamp():
     assert result["stats"]["align_failed"] == 0
     # Marks inside the note; no <seg> stamp and no </p><p> split within it.
     assert '<note type="comm">己，庚辛。</note>' in xml
-    assert "ljb:parallel-punct\">己" not in xml
+    assert "grognard:parallel-punct\">己" not in xml
     assert xml.count("<note") == 1 and xml.count("</note>") == 1
     # Post-note text segment still stamped as parallel-punct.
-    assert '<seg type="ljb:parallel-punct">壬癸。' in xml
+    assert '<seg type="grognard:parallel-punct">壬癸。' in xml
     assert han_only(INLINE_COMM_BODY) == han_only(xml)
     assert_well_formed(xml)
 

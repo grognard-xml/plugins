@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-cjk-dates",
+  "name": "@grognard/plugin-cjk-dates",
   "version": "0.1.0",
   "private": true,
-  "description": "Premodern East Asian date tagging plugin for LJB",
-  "ljbPlugin": true,
+  "description": "Premodern East Asian date tagging plugin for Grognard",
+  "grognardPlugin": true,
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs",

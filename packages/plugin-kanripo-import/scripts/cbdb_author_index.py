@@ -373,7 +373,7 @@ def default_cbdb_persons_path(plugin_root: Path) -> Path | None:
     import os
 
     candidates: list[Path] = []
-    env_path = os.environ.get("LJB_CBDB_PERSONS_PATH", "").strip()
+    env_path = os.environ.get("GROGNARD_CBDB_PERSONS_PATH", "").strip()
     if env_path:
         candidates.append(Path(env_path))
     candidates.extend(

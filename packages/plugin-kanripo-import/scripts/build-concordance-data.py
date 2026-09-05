@@ -312,7 +312,7 @@ def main() -> None:
     )
 
     manifest = {
-        "packKind": "ljb-kanripo-concordance",
+        "packKind": "grognard-kanripo-concordance",
         "generatedAt": generated_at,
         "files": {
             "krp_dz_collation.csv": "KR_ID ↔ DZID work-level collation (~1500 Daoist texts)",

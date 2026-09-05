@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://lejeanbaptiste.org/schemas/plugin-manifest/1.0.0",
-  "title": "LJB Plugin Manifest",
-  "description": "Describes an optional Le Jean-Baptiste plugin package for Tools → Plugins.",
+  "$id": "https://grognard.org/schemas/plugin-manifest/1.0.0",
+  "title": "Grognard Plugin Manifest",
+  "description": "Describes an optional Grognard plugin package for Tools → Plugins.",
   "type": "object",
   "required": [
     "manifestVersion",
@@ -11,7 +11,7 @@
     "version",
     "description",
     "license",
-    "ljb",
+    "grognard",
     "entry"
   ],
   "additionalProperties": false,
@@ -19,7 +19,7 @@
     "manifestVersion": {
       "type": "string",
       "const": "1.0.0",
-      "description": "Schema version. The LJB host rejects unknown major versions."
+      "description": "Schema version. The Grognard host rejects unknown major versions."
     },
     "id": {
       "type": "string",
@@ -51,14 +51,14 @@
       "type": "string",
       "minLength": 1
     },
-    "ljb": {
+    "grognard": {
       "type": "object",
       "required": ["minVersion"],
       "additionalProperties": false,
       "properties": {
         "minVersion": {
           "type": "string",
-          "description": "Minimum LJB desktop app version required."
+          "description": "Minimum Grognard desktop app version required."
         },
         "maxVersion": {
           "type": "string",
@@ -186,13 +186,13 @@
       "properties": {
         "module": {
           "type": "string",
-          "description": "Importable Python module exposing the IPC bridge, e.g. sanmiao.ljb_bridge."
+          "description": "Importable Python module exposing the IPC bridge, e.g. sanmiao.grognard_bridge."
         },
         "runtime": {
           "type": "string",
           "enum": ["bundled", "system", "conda-env"],
           "default": "bundled",
-          "description": "Where LJB finds the Python interpreter."
+          "description": "Where Grognard finds the Python interpreter."
         },
         "runtimePath": {
           "type": "string",
@@ -248,7 +248,7 @@
         "id": {
           "type": "string",
           "pattern": "^[a-z][a-z0-9-]*$",
-          "description": "Authority pack id registered with the LJB host (norbert-persons)."
+          "description": "Authority pack id registered with the Grognard host (norbert-persons)."
         },
         "label": { "type": "string", "minLength": 1 },
         "defaultTag": {

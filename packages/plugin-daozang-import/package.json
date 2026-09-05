@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-daozang-import",
+  "name": "@grognard/plugin-daozang-import",
   "version": "0.1.0",
   "private": true,
-  "description": "Fang Tongzi Daozang corpus download and import plugin for LJB",
-  "ljbPlugin": true,
+  "description": "Fang Tongzi Daozang corpus download and import plugin for Grognard",
+  "grognardPlugin": true,
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs",

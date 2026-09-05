@@ -254,7 +254,7 @@ def install_from_source(cache_root: Path, source_path: Path) -> dict[str, object
 
     raise RuntimeError(
         "Unsupported corpus source. Choose the Fang Tongzi .rar, an extracted folder of .txt files, "
-        "or an LJB corpus pack (.tar.gz with utf8/)."
+        "or an Grognard corpus pack (.tar.gz with utf8/)."
     )
 
 

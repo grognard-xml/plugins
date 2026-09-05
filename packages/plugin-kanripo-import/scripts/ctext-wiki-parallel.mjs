@@ -19,7 +19,7 @@ const CHAPTER_LINK =
   /href="wiki\.pl\?if=([^&"]+)&amp;chapter=(\d+)(?:#[^"]*)?">([^<]*)</gi;
 
 const FETCH_HEADERS = {
-  'User-Agent': 'ljb-plugin-kanripo-import/0.1 (+https://github.com/leJeanBaptiste)',
+  'User-Agent': 'grognard-plugin-kanripo-import/0.1 (+https://github.com/leJeanBaptiste)',
 };
 
 const CAPTCHA_MARKERS = [

@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-kanripo-import",
+  "name": "@grognard/plugin-kanripo-import",
   "version": "0.1.0",
   "private": true,
-  "description": "Kanripo clone-and-convert plugin for LJB",
-  "ljbPlugin": true,
+  "description": "Kanripo clone-and-convert plugin for Grognard",
+  "grognardPlugin": true,
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs",

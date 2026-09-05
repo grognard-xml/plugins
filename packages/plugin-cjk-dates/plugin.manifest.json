@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "description": "Tag and disambiguate premodern dates for China, Japan, and Korea using Sanmiao.",
   "author": "Daniel Patrick Morgan",
-  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-cjk-dates",
+  "homepage": "https://github.com/grognard/plugins/tree/main/packages/plugin-cjk-dates",
   "license": "GPL-2.0",
-  "ljb": {
+  "grognard": {
     "minVersion": "0.1.0"
   },
   "languages": ["zh-hant", "zh-hans", "lzh", "ja", "ko"],

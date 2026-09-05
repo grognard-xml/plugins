@@ -143,7 +143,7 @@ def _default_person_pack_roots() -> list[Path]:
         root.parents[3] / "authority extraction" / "packs" / "wikidata",
         root.parents[3] / "authoritypacks" / "packs" / "wikidata",
     ]
-    env = os.environ.get("LJB_WIKIDATA_PERSON_PACK_ROOT", "").strip()
+    env = os.environ.get("GROGNARD_WIKIDATA_PERSON_PACK_ROOT", "").strip()
     if env:
         candidates.insert(0, Path(env))
     return [path for path in candidates if path.is_dir()]
@@ -195,13 +195,13 @@ def _enrich_authorship_wikidata(
 
 
 def _default_wikidata_pack_path() -> Path | None:
-    """Locate work-zh-hant authority pack when building inside the LJB monorepo."""
+    """Locate work-zh-hant authority pack when building inside the Grognard monorepo."""
     root = _plugin_root()
     candidates = [
         root.parents[2] / "authoritypacks" / "packs" / "wikidata" / "work-zh-hant" / "works.ndjson",
         root.parents[3] / "authoritypacks" / "packs" / "wikidata" / "work-zh-hant" / "works.ndjson",
     ]
-    env = os.environ.get("LJB_WIKIDATA_WORK_PACK", "").strip()
+    env = os.environ.get("GROGNARD_WIKIDATA_WORK_PACK", "").strip()
     if env:
         candidates.insert(0, Path(env))
     for path in candidates:
@@ -708,7 +708,7 @@ def main() -> None:
     if pack_path:
         print(f"Wikidata authority pack: {_rel_source(pack_path)} ({len(pack_by_qid)} Q-ids loaded)")
     else:
-        print("Wikidata authority pack: not found (skip --wikidata-pack or set LJB_WIKIDATA_WORK_PACK)")
+        print("Wikidata authority pack: not found (skip --wikidata-pack or set GROGNARD_WIKIDATA_WORK_PACK)")
 
     work_qids: list[str] = []
     for entry in entries.values():
@@ -883,7 +883,7 @@ def main() -> None:
     )
 
     manifest = {
-        "packKind": "ljb-kanripo-metadata",
+        "packKind": "grognard-kanripo-metadata",
         "generatedAt": generated_at,
         "stats": {
             "works": len(entries),

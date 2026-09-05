@@ -7,7 +7,7 @@
  *   node scripts/build-corpus-pack.mjs --from-rar ~/Downloads/DaoCanon_txt_chm.rar
  *   node scripts/build-corpus-pack.mjs --from-utf8 ./staging/utf8
  *
- * Output: release/archives/ljb-plugin-daozang-import-corpus-<version>.tar.gz
+ * Output: release/archives/grognard-plugin-daozang-import-corpus-<version>.tar.gz
  */
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
@@ -48,7 +48,7 @@ const runPythonInstall = (sourcePath) => {
   });
   const result = spawnSync(
     'python3',
-    ['-c', 'from daozang_import.ljb_bridge import cli_main; cli_main()'],
+    ['-c', 'from daozang_import.grognard_bridge import cli_main; cli_main()'],
     {
       cwd: packageRoot,
       input: payload,
@@ -88,10 +88,10 @@ for (const name of ['utf8', 'index.json', 'manifest.json']) {
 }
 const manifestData = JSON.parse(await fsp.readFile(path.join(packRoot, 'manifest.json'), 'utf8'));
 manifestData.packVersion = version;
-manifestData.packKind = 'ljb-daozang-corpus';
+manifestData.packKind = 'grognard-daozang-corpus';
 await fsp.writeFile(path.join(packRoot, 'manifest.json'), `${JSON.stringify(manifestData, null, 2)}\n`);
 
-const archiveName = `ljb-plugin-daozang-import-corpus-${version}.tar.gz`;
+const archiveName = `grognard-plugin-daozang-import-corpus-${version}.tar.gz`;
 const archivePath = path.join(archiveRoot, archiveName);
 const tar = spawnSync('tar', ['-czf', archivePath, 'daozang-corpus'], {
   cwd: workRoot,

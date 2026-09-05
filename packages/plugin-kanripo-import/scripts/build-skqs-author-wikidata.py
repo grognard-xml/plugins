@@ -90,7 +90,7 @@ def _default_person_pack_roots() -> list[Path]:
         root.parents[3] / "authority extraction" / "packs" / "wikidata",
         root.parents[3] / "authoritypacks" / "packs" / "wikidata",
     ]
-    env = os.environ.get("LJB_WIKIDATA_PERSON_PACK_ROOT", "").strip()
+    env = os.environ.get("GROGNARD_WIKIDATA_PERSON_PACK_ROOT", "").strip()
     if env:
         candidates.insert(0, Path(env))
     return [path for path in candidates if path.is_dir()]

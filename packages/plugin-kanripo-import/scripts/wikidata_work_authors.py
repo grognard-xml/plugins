@@ -10,7 +10,7 @@ import urllib.request
 from typing import Any
 
 _LABEL_LANGS = ("zh", "zh-hant", "zh-hans", "lzh", "mul", "en")
-_USER_AGENT = "LJB-kanripo-metadata/1.0 (https://github.com/kanripo; metadata build)"
+_USER_AGENT = "Grognard-kanripo-metadata/1.0 (https://github.com/kanripo; metadata build)"
 _BATCH_SIZE = 50
 
 

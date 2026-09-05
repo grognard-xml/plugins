@@ -30,7 +30,7 @@ Outputs (under --out, default <pkg>/data):
                                 dila_id, norbert_id?, wikidata_qid?, dates?}]}}
   metadata/catalog_index.json  {"works": [CatalogHit dicts]}
   metadata/gaiji/cb_gaiji.json {CB_id: {unicode?}}
-  schema/cbeta_p5.rng / .sch   CBETA's grammar + the LJB §4 loosenings
+  schema/cbeta_p5.rng / .sch   CBETA's grammar + the Grognard §4 loosenings
                                (loosen_schema.py); .sch passes through
 """
 
@@ -330,7 +330,7 @@ def copy_schema(src: Path, out_schema: Path) -> None:
         (out_schema / "cbeta_p5.rng").write_text(
             loosen_rng(rng.read_text("utf-8")), "utf-8"
         )
-        _log(f"schema: {rng.name} + LJB §4 loosenings → cbeta_p5.rng")
+        _log(f"schema: {rng.name} + Grognard §4 loosenings → cbeta_p5.rng")
     if sch:
         (out_schema / "cbeta_p5.sch").write_text(
             loosen_sch(sch.read_text("utf-8")), "utf-8"

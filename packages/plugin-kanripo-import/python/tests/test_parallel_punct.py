@@ -63,7 +63,7 @@ def test_apply_punct_middle_and_stamp():
     result = apply_parallel_punctuation(body, parallel)
     assert result["applied"] is True
     xml = result["body_xml"]
-    assert 'type="ljb:parallel-punct"' in xml
+    assert 'type="grognard:parallel-punct"' in xml
     assert "丙、丁。" in xml
     assert "戊" in xml
     assert xml.count("<p>") >= 1
@@ -162,7 +162,7 @@ def test_second_source_does_not_nest_seg():
     body = '<div type="juan"><p>甲乙丙丁戊己庚</p></div>'
     once = apply_parallel_punctuation(body, "丙丁戊")
     twice = apply_parallel_punctuation(once["body_xml"], "丙丁戊")
-    assert twice["body_xml"].count('<seg type="ljb:parallel-punct">') == 1
+    assert twice["body_xml"].count('<seg type="grognard:parallel-punct">') == 1
     assert_well_formed(twice["body_xml"])
 
 
@@ -178,7 +178,7 @@ def test_coverage_from_stamps():
 def test_coverage_from_legacy_ana_stamps():
     # Files imported before the switch to `type` carry `ana="…"` — still read.
     legacy = (
-        '<div type="juan"><p>甲乙<seg ana="ljb:parallel-punct">丙、丁。</seg>戊己庚</p></div>'
+        '<div type="juan"><p>甲乙<seg ana="grognard:parallel-punct">丙、丁。</seg>戊己庚</p></div>'
     )
     stamped = coverage_from_stamps(legacy)
     assert stamped["empty"] is False
@@ -237,7 +237,7 @@ def test_segmented_punct_main_and_comm():
     assert "甲、乙" in xml
     assert "丙，丁" in xml
     assert "戊。" in xml
-    assert 'type="ljb:parallel-punct"' in xml
+    assert 'type="grognard:parallel-punct"' in xml
     assert result["coverage"]["empty"] is False
     assert_well_formed(xml)
 

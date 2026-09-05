@@ -18,7 +18,7 @@ mechanical "which repos, which flags, in what order".
 | `data/metadata/work_info.json` | `scripts/build-cbeta-metadata.py` | authority catalogue + person authority + crosswalk |
 | `data/metadata/catalog_index.json` | same | authority catalogue + **file grouping** (`--corpus` *or* `--file-list`) |
 | `data/metadata/gaiji/cb_gaiji.json` | same | `--gaiji` dir (best-effort; usually stays `{}` — see §5) |
-| `data/schema/cbeta_p5.rng` / `.sch` | `scripts/loosen_schema.py` (via `--schema`) | CBETA published RNG/SCH + LJB loosenings |
+| `data/schema/cbeta_p5.rng` / `.sch` | `scripts/loosen_schema.py` (via `--schema`) | CBETA published RNG/SCH + Grognard loosenings |
 
 The pinned corpus release is `DATA_VERSION_TAG` in
 `python/cbeta_import/constants.py` (currently **`2026R1`**). Bump it there first;
@@ -43,7 +43,7 @@ Authority** — `Buddhist_Studies_Person_Authority.xml`. Local copies seen at
 DILA authority-databases distribution.
 
 Schema (`--schema`) — a checkout of CBETA's published RelaxNG/Schematron
-(`cbeta-p5.rng` / `.sch`). `loosen_schema.py` applies the `ljb-cbeta-loosen v2`
+(`cbeta-p5.rng` / `.sch`). `loosen_schema.py` applies the `grognard-cbeta-loosen v2`
 widenings; the `.sch` passes through unchanged.
 
 ```bash
@@ -187,8 +187,8 @@ python3 scripts/build-cbeta-metadata.py \
 
 # then, from plugins/:
 npm run build:cbeta-import          # dist/register.mjs
-npm run test  -w @ljb/plugin-cbeta-import
-npm run smoke -w @ljb/plugin-cbeta-import
+npm run test  -w @grognard/plugin-cbeta-import
+npm run smoke -w @grognard/plugin-cbeta-import
 npm run verify:bundled              # checks data/ is present & well-formed
 ```
 

@@ -10,7 +10,7 @@ const packageRoot = path.join(__dirname, '..');
 const manifestPath = path.join(packageRoot, 'plugin.manifest.json');
 const registerPath = path.join(packageRoot, 'dist/register.mjs');
 const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/cbetaImportUi.ts';
-const hostUiPath = [process.env.LJB_HOST_ROOT, path.resolve(packageRoot, '../../../leaf-writer')]
+const hostUiPath = [process.env.GROGNARD_HOST_ROOT, path.resolve(packageRoot, '../../../leaf-writer')]
   .filter(Boolean)
   .map((root) => path.join(root, hostUiRel))
   .find((candidate) => fs.existsSync(candidate));
@@ -26,7 +26,7 @@ log('checking manifest…');
 assert.ok(fs.existsSync(manifestPath), 'plugin.manifest.json missing');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 assert.equal(manifest.id, 'cbeta-import');
-assert.equal(manifest.entry.python.module, 'cbeta_import.ljb_bridge');
+assert.equal(manifest.entry.python.module, 'cbeta_import.grognard_bridge');
 assert.ok(manifest.contributions?.fileMenu?.length >= 1, 'expected fileMenu item');
 log('manifest OK');
 
@@ -37,7 +37,7 @@ execFileSync('node', ['../../packages/plugin-sdk/validate.mjs', manifestPath], {
 });
 
 if (!fs.existsSync(registerPath)) {
-  fail('dist/register.mjs missing — run: npm run build -w @ljb/plugin-cbeta-import');
+  fail('dist/register.mjs missing — run: npm run build -w @grognard/plugin-cbeta-import');
 }
 
 log('checking host UI module wiring…');

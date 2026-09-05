@@ -1,5 +1,5 @@
 {
-  "packKind": "ljb-kanripo-concordance",
+  "packKind": "grognard-kanripo-concordance",
   "generatedAt": "2026-08-30T19:49:19+00:00",
   "files": {
     "krp_dz_collation.csv": "KR_ID ↔ DZID work-level collation (~1500 Daoist texts)",

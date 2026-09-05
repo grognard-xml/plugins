@@ -26,8 +26,8 @@ const TARGETS = {
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
 
-const platform = process.env.LJB_PYTHON_PLATFORM || process.platform;
-const arch = process.env.LJB_PYTHON_ARCH || process.arch;
+const platform = process.env.GROGNARD_PYTHON_PLATFORM || process.platform;
+const arch = process.env.GROGNARD_PYTHON_ARCH || process.arch;
 
 const target = TARGETS[`${platform}-${arch}`];
 if (!target) {

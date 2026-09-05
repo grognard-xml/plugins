@@ -23,7 +23,7 @@ const fromDir = args.includes('--from-dir') ? args[args.indexOf('--from-dir') + 
 const runPython = (payload) => {
   const result = spawnSync(
     'python3',
-    ['-c', 'from cbeta_import.ljb_bridge import cli_main; cli_main()'],
+    ['-c', 'from cbeta_import.grognard_bridge import cli_main; cli_main()'],
     {
       cwd: packageRoot,
       input: JSON.stringify(payload),
@@ -31,7 +31,7 @@ const runPython = (payload) => {
       env: {
         ...process.env,
         PYTHONPATH: path.join(packageRoot, 'python'),
-        LJB_PLUGIN_INSTALL_PATH: packageRoot,
+        GROGNARD_PLUGIN_INSTALL_PATH: packageRoot,
       },
     },
   );
@@ -58,7 +58,7 @@ if (fromDir) {
 const manifestPath = path.join(dataRoot, 'corpus.json');
 if (fs.existsSync(manifestPath)) {
   const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
-  manifest.packKind = 'ljb-cbeta-bundled';
+  manifest.packKind = 'grognard-cbeta-bundled';
   manifest.bundled = true;
   await fsp.writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }

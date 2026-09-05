@@ -87,7 +87,7 @@ class LoosenSchemaV2Test(unittest.TestCase):
         cls.rng = etree.RelaxNG(etree.fromstring(cls.text.encode()))
 
     def test_is_v2(self):
-        self.assertIn("ljb-cbeta-loosen v2", self.text)
+        self.assertIn("grognard-cbeta-loosen v2", self.text)
 
     def test_div_is_dual_namespace(self):
         root = etree.fromstring(self.text.encode())

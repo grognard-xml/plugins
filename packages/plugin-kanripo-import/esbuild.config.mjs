@@ -10,7 +10,7 @@ const require = createRequire(import.meta.url);
 const esbuildRootCandidates = [
   path.join(packageRoot, 'node_modules/esbuild'),
   path.join(packageRoot, '../../node_modules/esbuild'),
-  path.join(packageRoot, '../../../lejeanbaptiste/node_modules/esbuild'),
+  path.join(packageRoot, '../../../grognard/node_modules/esbuild'),
 ];
 let esbuild;
 for (const candidate of esbuildRootCandidates) {

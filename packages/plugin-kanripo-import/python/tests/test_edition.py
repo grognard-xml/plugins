@@ -10,7 +10,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 class TestEditionResolve(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
-        os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(PLUGIN_ROOT)
+        os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(PLUGIN_ROOT)
         clear_edition_cache()
 
     def test_skqs_source_with_locator(self) -> None:

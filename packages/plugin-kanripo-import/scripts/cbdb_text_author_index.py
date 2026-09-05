@@ -31,7 +31,7 @@ def normalize_work_title(title: str) -> str:
 
 
 def default_cbdb_sqlite_path(plugin_root: Path) -> Path | None:
-    env_path = os.environ.get("LJB_CBDB_SQLITE_PATH", "").strip()
+    env_path = os.environ.get("GROGNARD_CBDB_SQLITE_PATH", "").strip()
     candidates: list[Path] = []
     if env_path:
         candidates.append(Path(env_path))

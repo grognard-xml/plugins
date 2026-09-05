@@ -69,7 +69,7 @@ python3 scripts/build-daozang-metadata.py \
 
 When the normalized CSV is absent, dynasty is inferred from the Fang Tongzi filename (e.g. `-元-陳致虛.txt` → 元).
 
-**Kanripo crosswalk:** KR_ID → bundled Daozang filename lives in the sibling **kanripo-import** plugin (`data/concordance/kanripo_daozang_map.json`). Rebuild with `npm run build:concordance -w @ljb/plugin-kanripo-import`.
+**Kanripo crosswalk:** KR_ID → bundled Daozang filename lives in the sibling **kanripo-import** plugin (`data/concordance/kanripo_daozang_map.json`). Rebuild with `npm run build:concordance -w @grognard/plugin-kanripo-import`.
 
 `data/corpus/utf8/` is gitignored locally because of size; CI/release machines run the build script before packaging.
 
@@ -98,4 +98,4 @@ cd plugins
 npm run smoke:daozang-import
 ```
 
-Install in LJB via **Tools → Plugins → Install from folder…** pointing at `packages/plugin-daozang-import` (after `build-corpus-data` has been run once).
+Install in Grognard via **Tools → Plugins → Install from folder…** pointing at `packages/plugin-daozang-import` (after `build-corpus-data` has been run once).

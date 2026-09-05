@@ -1,1 +1,1 @@
-"""LJB CBETA-import plugin Python package (bridge only)."""
+"""Grognard CBETA-import plugin Python package (bridge only)."""

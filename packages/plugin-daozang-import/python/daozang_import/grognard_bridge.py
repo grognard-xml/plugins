@@ -14,11 +14,11 @@ from daozang_import.daozang_tei import convert_daozang_txt
 def _ensure_plugin_install_path() -> None:
     import os
 
-    if os.environ.get("LJB_PLUGIN_INSTALL_PATH", "").strip():
+    if os.environ.get("GROGNARD_PLUGIN_INSTALL_PATH", "").strip():
         return
     inferred = Path(__file__).resolve().parents[2]
     if (inferred / "data" / "corpus" / "index.json").is_file():
-        os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(inferred)
+        os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(inferred)
 
 
 def cli_main() -> None:

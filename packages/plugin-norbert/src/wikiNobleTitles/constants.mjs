@@ -35,4 +35,4 @@ export const SKIP_SECTIONS = new Set([
 export const WIKI_API = 'https://zh.wikipedia.org/w/api.php';
 
 /** Required by Wikimedia API etiquette. */
-export const WIKI_USER_AGENT = 'LJB-Norbert-Plugin/0.1 (digital humanities; norbert wiki noble titles fetch)';
+export const WIKI_USER_AGENT = 'Grognard-Norbert-Plugin/0.1 (digital humanities; norbert wiki noble titles fetch)';

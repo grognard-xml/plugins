@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the LJB §4 loosenings to CBETA's published RelaxNG (+ Schematron).
+"""Apply the Grognard §4 loosenings to CBETA's published RelaxNG (+ Schematron).
 
 CBETA ships one flat, ODD-generated grammar (`cbeta-p5.rng`, `tei_`-prefixed
 pattern names, ~570 `<define>`s) with 3 embedded Schematron rules. We widen it
@@ -8,11 +8,11 @@ the other East Asian corpus importers (Daozang, Kanripo, Wikisource, BDRC):
 
 1. `@ref` / `@key` permitted on `<title>`, `<author>`, `<byline>` and every NE
    element (per-define, guarded so we never double-declare an attribute);
-2. the LJB NE inventory (`persName`, `placeName`, `orgName`, `roleName`, `name`,
+2. the Grognard NE inventory (`persName`, `placeName`, `orgName`, `roleName`, `name`,
    `title`, `date`, `nobleTitle`) added to `tei_model.phrase` — so it may occur
    in `<p>`, `<l>`, `<head>`, `<seg>`, `<note>` …;
 3. `<date>` extended with the Sanmiao parse children + resolution attributes
-   (leaf-writer/docs/ljb-tei-extensions.md; kept in sync with
+   (leaf-writer/docs/grognard-tei-extensions.md; kept in sync with
    apps/desktop/src/sanmiaoSchemaMerge.ts).
 
 v2 adds three model loosenings so non-CBETA corpora (which emit plain TEI
@@ -54,7 +54,7 @@ A = "http://relaxng.org/ns/compatibility/annotations/1.0"
 _R = f"{{{RNG}}}"
 _A = f"{{{A}}}"
 
-MARKER = "ljb-cbeta-loosen v2"
+MARKER = "grognard-cbeta-loosen v2"
 
 RNG_NS_URI = RNG  # relaxng structure ns (for building <name> patterns)
 CBETA_NS_URI = "http://www.cbeta.org/ns/1.0"
@@ -209,7 +209,7 @@ def _append_ljb_defines(root: etree._Element, defs: dict[str, etree._Element]) -
         d = _el("define", name="ljb_nobleTitle")
         el = etree.SubElement(d, f"{_R}element", name="nobleTitle")
         doc = etree.SubElement(el, f"{_A}documentation")
-        doc.text = "LJB: fief/place + rank grouping (ljb-tei-extensions.md)."
+        doc.text = "Grognard: fief/place + rank grouping (grognard-tei-extensions.md)."
         one = etree.SubElement(el, f"{_R}oneOrMore")
         ch = etree.SubElement(one, f"{_R}choice")
         etree.SubElement(ch, f"{_R}text")
@@ -356,13 +356,18 @@ def loosen_rng(text: str) -> str:
     }
     _append_ljb_defines(root, defs)
 
-    # Replace any prior LJB loosen note rather than stacking one per run.
+    # Replace any prior loosen note rather than stacking one per run.
+    # (Also matches the pre-rename "LJB tagging loosenings" note for a clean
+    # one-time transition when cbeta_p5.rng is regenerated after the rename.)
     for node in root.findall(f"{_A}documentation"):
-        if node.text and "LJB tagging loosenings" in node.text:
+        if node.text and (
+            "Grognard tagging loosenings" in node.text
+            or "LJB tagging loosenings" in node.text
+        ):
             root.remove(node)
     doc = etree.Element(f"{_A}documentation")
     doc.text = (
-        f"Le Jean-Baptiste: CBETA P5 + LJB tagging loosenings ({MARKER}) — "
+        f"Grognard: CBETA P5 + Grognard tagging loosenings ({MARKER}) — "
         f"{report}"
     )
     root.insert(0, doc)

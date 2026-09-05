@@ -12,15 +12,15 @@ const registerPath = path.join(packageRoot, 'dist/register.mjs');
 const registerSourcePath = path.join(packageRoot, 'src/register.ts');
 const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/kanripoImportUi.ts';
 const hostUiPath = [
-  process.env.LJB_HOST_ROOT,
-  path.resolve(packageRoot, '../../../lejeanbaptiste'),
+  process.env.GROGNARD_HOST_ROOT,
+  path.resolve(packageRoot, '../../../grognard'),
   path.resolve(packageRoot, '../../../leaf-writer'),
 ]
   .filter(Boolean)
   .map((root) => path.join(root, hostUiRel))
   .find((candidate) => fs.existsSync(candidate));
 const worksPath = path.join(packageRoot, 'data/krp_works.json');
-const bridgePath = path.join(packageRoot, 'python/kanripo_import/ljb_bridge.py');
+const bridgePath = path.join(packageRoot, 'python/kanripo_import/grognard_bridge.py');
 
 const log = (message) => console.log(`[smoke:kanripo-import] ${message}`);
 const fail = (message) => {
@@ -32,7 +32,7 @@ log('checking manifest…');
 assert.ok(fs.existsSync(manifestPath), 'plugin.manifest.json missing');
 const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 assert.equal(manifest.id, 'kanripo-import');
-assert.equal(manifest.entry.python.module, 'kanripo_import.ljb_bridge');
+assert.equal(manifest.entry.python.module, 'kanripo_import.grognard_bridge');
 assert.ok(manifest.contributions?.fileMenu?.length >= 1, 'expected fileMenu item');
 log('manifest OK');
 
@@ -43,13 +43,13 @@ execFileSync('node', ['../../packages/plugin-sdk/validate.mjs', manifestPath], {
 });
 
 if (!fs.existsSync(registerPath)) {
-  fail('dist/register.mjs missing — run: npm run build -w @ljb/plugin-kanripo-import');
+  fail('dist/register.mjs missing — run: npm run build -w @grognard/plugin-kanripo-import');
 }
 
 log('checking host UI module wiring…');
 assert.ok(
   hostUiPath,
-  'host UI module missing (looked for sibling lejeanbaptiste/ or leaf-writer/, or LJB_HOST_ROOT)',
+  'host UI module missing (looked for sibling grognard/ or leaf-writer/, or GROGNARD_HOST_ROOT)',
 );
 const hostUiSource = fs.readFileSync(hostUiPath, 'utf8');
 assert.match(hostUiSource, /registerKanripoImportUi/, 'host module must export registerKanripoImportUi');
@@ -93,7 +93,7 @@ execFileSync('python', ['-m', 'pytest', 'python/tests', '-q'], {
   env: {
     ...process.env,
     PYTHONPATH: path.join(packageRoot, 'python'),
-    LJB_PLUGIN_INSTALL_PATH: packageRoot,
+    GROGNARD_PLUGIN_INSTALL_PATH: packageRoot,
   },
   stdio: 'inherit',
 });

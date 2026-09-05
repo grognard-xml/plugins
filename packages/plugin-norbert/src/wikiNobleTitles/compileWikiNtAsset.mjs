@@ -122,7 +122,7 @@ export function planToAssetRecord(plan, row, index) {
 
   // The wiki asset is deliberately still a compact, structured input to the
   // Norbert runtime.  It is not the output of name expansion.  These fields
-  // provide the AuthorityCandidate envelope required by LJB's strict NDJSON
+  // provide the AuthorityCandidate envelope required by Grognard's strict NDJSON
   // loader while retaining the original structured payload below.
   const personAuthorityId =
     norbertPersonId ?? (wiki.wikidataId ? `wikidata:${wiki.wikidataId}` : null);

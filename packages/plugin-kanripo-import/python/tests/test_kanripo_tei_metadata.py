@@ -11,7 +11,7 @@ METADATA_JSON = PLUGIN_ROOT / "data" / "metadata" / "krp_works_by_id.json"
 
 class TestKanripoTeiMetadata(unittest.TestCase):
     def setUp(self) -> None:
-        os.environ["LJB_PLUGIN_INSTALL_PATH"] = str(PLUGIN_ROOT)
+        os.environ["GROGNARD_PLUGIN_INSTALL_PATH"] = str(PLUGIN_ROOT)
         from kanripo_import.work_metadata import clear_work_metadata_cache
 
         clear_work_metadata_cache()

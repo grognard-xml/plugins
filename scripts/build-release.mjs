@@ -26,7 +26,7 @@ for (const entry of await fsp.readdir(packagesRoot, { withFileTypes: true })) {
   if (!fs.existsSync(manifestPath)) continue;
 
   const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
-  const archiveName = `ljb-plugin-${manifest.id}-${manifest.version}.tar.gz`;
+  const archiveName = `grognard-plugin-${manifest.id}-${manifest.version}.tar.gz`;
   const archivePath = path.join(archiveRoot, archiveName);
   const stagingRoot = path.join(releaseRoot, '.staging', manifest.id);
   await fsp.rm(stagingRoot, { recursive: true, force: true });

@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "description": "Clone CBETA (漢文電子佛典) works from GitHub, split each work by juan, and convert CBETA P5 to project TEI. The xml-p5 corpus is installed with the plugin (cloned from GitHub on first install if not bundled).",
   "author": "Daniel Patrick Morgan",
-  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-cbeta-import",
+  "homepage": "https://github.com/grognard/plugins/tree/main/packages/plugin-cbeta-import",
   "license": "GPL-2.0",
-  "ljb": {
+  "grognard": {
     "minVersion": "0.1.0"
   },
   "languages": ["zh-hant", "zh-hans", "lzh", "sa", "pi"],
@@ -20,7 +20,7 @@
     "kind": "hybrid",
     "module": "dist/register.mjs",
     "python": {
-      "module": "cbeta_import.ljb_bridge",
+      "module": "cbeta_import.grognard_bridge",
       "runtime": "system",
       "runtimePath": "python"
     }

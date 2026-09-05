@@ -12,7 +12,7 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.fixture(autouse=True)
 def _plugin_path(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("LJB_PLUGIN_INSTALL_PATH", str(PLUGIN_ROOT))
+    monkeypatch.setenv("GROGNARD_PLUGIN_INSTALL_PATH", str(PLUGIN_ROOT))
     from kanripo_import import concordance
 
     concordance.clear_concordance_cache()

@@ -1,1 +1,1 @@
-"""LJB Kanripo-import plugin Python package (bridge only)."""
+"""Grognard Kanripo-import plugin Python package (bridge only)."""

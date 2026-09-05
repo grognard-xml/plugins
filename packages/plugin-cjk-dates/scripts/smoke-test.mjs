@@ -18,9 +18,9 @@ const registerPath = path.join(packageRoot, 'dist/register.mjs');
 const registerSourcePath = path.join(packageRoot, 'src/register.ts');
 const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/cjkDatesUi.ts';
 const hostUiPath = [
-  process.env.LJB_HOST_ROOT,
+  process.env.GROGNARD_HOST_ROOT,
   path.resolve(packageRoot, '../../../leaf-writer'),
-  path.resolve(packageRoot, '../../../lejeanbaptiste'),
+  path.resolve(packageRoot, '../../../grognard'),
 ]
   .filter(Boolean)
   .map((root) => path.join(root, hostUiRel))
@@ -49,13 +49,13 @@ execFileSync('node', ['../../packages/plugin-sdk/validate.mjs', manifestPath], {
 });
 
 if (!fs.existsSync(registerPath)) {
-  fail('dist/register.mjs missing — run: npm run build -w @ljb/plugin-cjk-dates');
+  fail('dist/register.mjs missing — run: npm run build -w @grognard/plugin-cjk-dates');
 }
 
 log('checking host UI module wiring…');
 assert.ok(
   hostUiPath,
-  'host UI module missing (leaf-writer sibling, lejeanbaptiste sibling, or LJB_HOST_ROOT)',
+  'host UI module missing (leaf-writer sibling, grognard sibling, or GROGNARD_HOST_ROOT)',
 );
 const hostUiSource = fs.readFileSync(hostUiPath, 'utf8');
 assert.match(hostUiSource, /registerCjkDatesUi/, 'host module must export registerCjkDatesUi');

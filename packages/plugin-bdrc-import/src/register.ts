@@ -1,11 +1,11 @@
 /**
- * BDRC import plugin entry. UI + fetch/emit pipeline live in the LJB host bundle;
+ * BDRC import plugin entry. UI + fetch/emit pipeline live in the Grognard host bundle;
  * this package only carries the manifest and this stub.
  *
  * Design: leaf-writer/docs/bdrc-import-planning.md
  */
 
-/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
+/** @typedef {import('@grognard/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
 
 const HOST_UI_MODULE = 'bdrc-import-ui';
 

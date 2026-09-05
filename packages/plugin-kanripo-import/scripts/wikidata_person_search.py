@@ -17,7 +17,7 @@ from kanripo_import.person_name_normalize import (
     person_name_match_variants,
 )
 
-_USER_AGENT = "LJB-kanripo-metadata/1.0 (https://github.com/kanripo; metadata build)"
+_USER_AGENT = "Grognard-kanripo-metadata/1.0 (https://github.com/kanripo; metadata build)"
 _SEARCH_LANGS = ("zh-hant", "zh", "en")
 _ENTITY_LANGS = ("zh-hant", "zh", "en", "lzh")
 

@@ -2,11 +2,11 @@
 
 Bundled (ships in the installed plugin, committed): ``data/metadata`` (work-info,
 gaiji table, catalog index) and ``data/schema`` (CBETA `_p5.rng` / `_p5.sch`
-with the LJB loosenings — see cbeta-import-planning.md §4).
+with the Grognard loosenings — see cbeta-import-planning.md §4).
 
 The xml-p5 checkout lives under ``data/corpus/xml-p5`` inside the installed plugin
 (same pattern as Daozang's ``data/corpus/``). The desktop host clones it on plugin
-install / enable when missing. A legacy copy under ``LJB_PLUGIN_CACHE_PATH`` is
+install / enable when missing. A legacy copy under ``GROGNARD_PLUGIN_CACHE_PATH`` is
 still read if present. ``import`` itself hits no network (kanripo discipline).
 """
 
@@ -20,7 +20,7 @@ from cbeta_import.constants import CANON_ORDER
 
 
 def plugin_root() -> Path:
-    env = os.environ.get("LJB_PLUGIN_INSTALL_PATH", "").strip()
+    env = os.environ.get("GROGNARD_PLUGIN_INSTALL_PATH", "").strip()
     if env:
         return Path(env)
     # …/python/cbeta_import/_paths.py → plugin package root
@@ -54,7 +54,7 @@ def gaiji_table_path() -> Path:
 
 def cache_root() -> Path:
     """Writable scratch dir (built catalog index cache). Falls back to ``data/``."""
-    env = os.environ.get("LJB_PLUGIN_CACHE_PATH", "").strip()
+    env = os.environ.get("GROGNARD_PLUGIN_CACHE_PATH", "").strip()
     return Path(env) if env else data_dir()
 
 
@@ -64,7 +64,7 @@ def bundled_corpus_dir() -> Path:
 
 
 def legacy_cache_corpus_dir() -> Path:
-    env = os.environ.get("LJB_PLUGIN_CACHE_PATH", "").strip()
+    env = os.environ.get("GROGNARD_PLUGIN_CACHE_PATH", "").strip()
     if not env:
         return bundled_corpus_dir()
     return Path(env) / "corpus" / "xml-p5"

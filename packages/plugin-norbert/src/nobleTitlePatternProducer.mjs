@@ -1,7 +1,7 @@
 import surnamesData from '../data/surnames.json';
 import geoAdminSuffixes from '../data/geo-admin-suffixes.json';
 
-/** @typedef {import('@ljb/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
+/** @typedef {import('@grognard/plugin-sdk/register-context').PluginRegisterContext} PluginRegisterContext */
 
 const PRINCELY_RANKS = new Set(['王', '公', '侯', '伯', '子', '男']);
 

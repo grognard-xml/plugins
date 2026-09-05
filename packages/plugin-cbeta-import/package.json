@@ -1,9 +1,9 @@
 {
-  "name": "@ljb/plugin-cbeta-import",
+  "name": "@grognard/plugin-cbeta-import",
   "version": "0.1.0",
   "private": true,
-  "description": "CBETA (漢文電子佛典) clone-and-convert plugin for LJB — split by juan, translate CBETA P5 to project TEI.",
-  "ljbPlugin": true,
+  "description": "CBETA (漢文電子佛典) clone-and-convert plugin for Grognard — split by juan, translate CBETA P5 to project TEI.",
+  "grognardPlugin": true,
   "type": "module",
   "scripts": {
     "build": "node esbuild.config.mjs",

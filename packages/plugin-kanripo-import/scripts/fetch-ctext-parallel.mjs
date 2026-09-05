@@ -47,7 +47,7 @@ try {
   if (values['list-sections']) {
     const { listWikiCatalog } = await import('./ctext-wiki-parallel.mjs');
     const html = await fetch(url, {
-      headers: { 'User-Agent': 'ljb-plugin-kanripo-import/0.1' },
+      headers: { 'User-Agent': 'grognard-plugin-kanripo-import/0.1' },
     }).then((response) => response.text());
     for (const section of listWikiCatalog(html)) {
       process.stdout.write(`${section.title || section.slug}\t${section.rowCount} rows\t${section.id}\n`);

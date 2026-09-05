@@ -5,9 +5,9 @@
   "version": "0.1.0",
   "description": "Premodern Chinese entity tagging with contextual person clues, noble titles, and the Norbert authority pack.",
   "author": "Daniel Patrick Morgan",
-  "homepage": "https://github.com/lejeanbaptiste/plugins/tree/main/packages/plugin-norbert",
+  "homepage": "https://github.com/grognard/plugins/tree/main/packages/plugin-norbert",
   "license": "GPL-2.0",
-  "ljb": {
+  "grognard": {
     "minVersion": "0.1.0"
   },
   "languages": ["zh-hant", "zh-hans", "lzh"],
@@ -20,7 +20,7 @@
     "kind": "hybrid",
     "module": "dist/register.mjs",
     "python": {
-      "module": "norbert.ljb_bridge",
+      "module": "norbert.grognard_bridge",
       "runtime": "bundled",
       "runtimePath": "python"
     }

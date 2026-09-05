@@ -2,7 +2,7 @@
 
 Self-contained hybrid plugin: Mandoku → TEI conversion, bundled gaiji tables/PNGs, parallel punctuation, work metadata (SKQS + Daozang + Wikidata), and a KRP–Wikisource–Daozang crosswalk for one-click punctuation sources.
 
-**Runtime:** everything reads from bundled files under this package’s `data/` folder (via `LJB_PLUGIN_INSTALL_PATH`). No checkout of `chinese_corpus_metadata`, `normalization_zh`, or other sibling projects is required to import or punctuate.
+**Runtime:** everything reads from bundled files under this package’s `data/` folder (via `GROGNARD_PLUGIN_INSTALL_PATH`). No checkout of `chinese_corpus_metadata`, `normalization_zh`, or other sibling projects is required to import or punctuate.
 
 **Maintainers** may refresh bundled tables from upstream with `--sync-from` (see [Refreshing bundled data](#refreshing-bundled-data-maintainers-only)).
 
@@ -20,7 +20,7 @@ Self-contained hybrid plugin: Mandoku → TEI conversion, bundled gaiji tables/P
 | Edition profile table (SKQS WYG, 正統道藏, …) | `data/metadata/edition_profiles.json` |
 | KR ↔ DZ / Daozang concordance | `data/concordance/` |
 | KRP parallel-source crosswalk (WS + Daozang buttons) | `data/concordance/krp_parallel_sources.json` |
-| Wizard UI | LJB host module (`kanripoImportUi`) |
+| Wizard UI | Grognard host module (`kanripoImportUi`) |
 
 ## Self-containment
 
@@ -69,7 +69,7 @@ Build-only inputs under `data/metadata/sources/` (including `krp_wikidata_qids.j
 Rebuild:
 
 ```bash
-npm run build:metadata -w @ljb/plugin-kanripo-import
+npm run build:metadata -w @grognard/plugin-kanripo-import
 ```
 
 The full build needs the optional Wikidata authority pack (`--wikidata-pack`); without it the
@@ -146,7 +146,7 @@ python3 scripts/fetch-kr-classification.py
 
 ### What lands in imported TEI
 
-**`<teiHeader>` biblStruct (LJB file metadata panel):**
+**`<teiHeader>` biblStruct (Grognard file metadata panel):**
 
 - `monogr/edition` ← `edition_label`
 - `monogr/imprint/date@when` ← `edition_date`
@@ -207,7 +207,7 @@ Bundled under `data/concordance/` for offline KR_ID ↔ DZID ↔ bundled Daozang
 Refresh concordance tables:
 
 ```bash
-npm run build:concordance -w @ljb/plugin-kanripo-import
+npm run build:concordance -w @grognard/plugin-kanripo-import
 ```
 
 Python API: `kanripo_import.concordance.lookup_daozang_rel_path("KR5a0087")`.
@@ -230,9 +230,9 @@ npm run build:concordance   # if DZ paths changed
 ```
 
 Optional Wikidata authority-pack enrichment (aliases, description, years — gap-fill only).
-When building inside the LJB monorepo, the pack is **auto-discovered** at
+When building inside the Grognard monorepo, the pack is **auto-discovered** at
 `authoritypacks/packs/wikidata/work-zh-hant/works.ndjson`. Override with
-`--wikidata-pack` or `LJB_WIKIDATA_WORK_PACK`:
+`--wikidata-pack` or `GROGNARD_WIKIDATA_WORK_PACK`:
 
 ```bash
 python3 scripts/build-kanripo-metadata.py --sync-from /path/to/chinese_corpus_metadata
@@ -266,7 +266,7 @@ See also `data/metadata/sources/README.md`.
 ## Refresh gaiji data
 
 ```bash
-npm run download:gaiji -w @ljb/plugin-kanripo-import
+npm run download:gaiji -w @grognard/plugin-kanripo-import
 ```
 
 ## Dev smoke test
@@ -281,7 +281,7 @@ npm run smoke:kanripo-import
 Check every juan in a Kanripo work against one parallel source — well-formed XML and coverage per file:
 
 ```bash
-npm run test:parallel-batch -w @ljb/plugin-kanripo-import -- \
+npm run test:parallel-batch -w @grognard/plugin-kanripo-import -- \
   --kanripo /path/to/KR4h0002 \
   --ctext-url 'https://ctext.org/wiki.pl?if=gb&chapter=793335'
 ```
@@ -289,16 +289,16 @@ npm run test:parallel-batch -w @ljb/plugin-kanripo-import -- \
 Or with a saved parallel file:
 
 ```bash
-npm run fetch:ctext -w @ljb/plugin-kanripo-import -- \
+npm run fetch:ctext -w @grognard/plugin-kanripo-import -- \
   --url 'https://ctext.org/wiki.pl?if=gb&chapter=793335' > /tmp/ctext.txt
 
-npm run test:parallel-batch -w @ljb/plugin-kanripo-import -- \
+npm run test:parallel-batch -w @grognard/plugin-kanripo-import -- \
   --kanripo /path/to/KR4h0002 --parallel /tmp/ctext.txt
 ```
 
 **ctext URL:** use a **wiki commentary page** (`…/wiki.pl?…&chapter=…`), not a library/reading root URL. One wiki chapter often matches only part of a multi-juan Kanripo work (other juans correctly show ~0% overlap).
 
-Requires sibling `leaf-writer` (or `LJB_HOST_ROOT`) for host UI wiring check. Python tests run against bundled data with `LJB_PLUGIN_INSTALL_PATH` set automatically in smoke.
+Requires sibling `leaf-writer` (or `GROGNARD_HOST_ROOT`) for host UI wiring check. Python tests run against bundled data with `GROGNARD_PLUGIN_INSTALL_PATH` set automatically in smoke.
 
 ## CLI: convert + segmented parallel punctuation
 
@@ -307,20 +307,20 @@ From the plugin package root, with sibling `leaf-writer` for bundled Python:
 ```bash
 PLUGIN="/path/to/plugins/packages/plugin-kanripo-import"
 PY="/path/to/leaf-writer/apps/desktop/resources/python/bin/python3"
-export LJB_PLUGIN_INSTALL_PATH="$PLUGIN" PYTHONPATH="$PLUGIN/python"
+export GROGNARD_PLUGIN_INSTALL_PATH="$PLUGIN" PYTHONPATH="$PLUGIN/python"
 
 # 1. Convert Kanripo txt → TEI body
 echo '{"path":"/path/to/KR4h0002_001.txt","normalize":"off","gaiji_dest_dir":"/tmp/_gaiji"}' \
-  | "$PY" -c "from kanripo_import.ljb_bridge import cli_main; cli_main()" \
+  | "$PY" -c "from kanripo_import.grognard_bridge import cli_main; cli_main()" \
   > /tmp/kanripo-body.json
 
 # 2. Fetch whole ctext wiki chapter (default: all rows on the page)
-npm run fetch:ctext -w @ljb/plugin-kanripo-import -- \
+npm run fetch:ctext -w @grognard/plugin-kanripo-import -- \
   --url 'https://ctext.org/wiki.pl?if=gb&chapter=793335' \
   > /tmp/ctext-whole.txt
 
 # Optional: one section only
-npm run fetch:ctext -w @ljb/plugin-kanripo-import -- \
+npm run fetch:ctext -w @grognard/plugin-kanripo-import -- \
   --url 'https://ctext.org/wiki.pl?if=gb&chapter=793335' --section 兩都賦序 \
   > /tmp/ctext-section.txt
 
@@ -328,12 +328,12 @@ npm run fetch:ctext -w @ljb/plugin-kanripo-import -- \
 python3 - <<'PY'
 import json, os, subprocess
 from pathlib import Path
-plugin = Path(os.environ["LJB_PLUGIN_INSTALL_PATH"])
+plugin = Path(os.environ["GROGNARD_PLUGIN_INSTALL_PATH"])
 body = json.loads(Path("/tmp/kanripo-body.json").read_text())["body_xml"]
 parallel = Path("/tmp/ctext-whole.txt").read_text()
 payload = {"op": "parallel_punct", "mode": "segmented", "body_xml": body, "parallel_text": parallel}
 proc = subprocess.run(
-    ["python3", "-c", "from kanripo_import.ljb_bridge import cli_main; cli_main()"],
+    ["python3", "-c", "from kanripo_import.grognard_bridge import cli_main; cli_main()"],
     input=json.dumps(payload),
     text=True,
     capture_output=True,
@@ -347,7 +347,7 @@ PY
 
 `mode: "segmented"` merges split commentary notes (`</note></p><p><note type="comm">`), then matches basetext and `<note type="comm">` segments separately against ctext-style inline commentary. Use `mode: "tape"` (default) for a single contiguous Han sticker.
 
-## Install in LJB
+## Install in Grognard
 
 1. `npm run build:kanripo-import` in `plugins`
 2. `npm run dev:desktop` in `leaf-writer`
