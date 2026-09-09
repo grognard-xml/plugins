@@ -37,10 +37,10 @@ def default_cbdb_sqlite_path(plugin_root: Path) -> Path | None:
         candidates.append(Path(env_path))
     candidates.extend(
         [
-            plugin_root.parents[2] / "authority extraction" / ".upstream" / "cbdb.sqlite3",
-            plugin_root.parents[3] / "authority extraction" / ".upstream" / "cbdb.sqlite3",
-            plugin_root.parents[2] / "leaf-writer" / "databases" / "cbdb_20260627.sqlite3",
-            plugin_root.parents[3] / "leaf-writer" / "databases" / "cbdb_20260627.sqlite3",
+            plugin_root.parents[2] / "authoritypacks" / ".upstream" / "cbdb.sqlite3",
+            plugin_root.parents[3] / "authoritypacks" / ".upstream" / "cbdb.sqlite3",
+            plugin_root.parents[2]  / "grognard" /  "databases" / "cbdb_20260627.sqlite3",
+            plugin_root.parents[3]  / "grognard" /  "databases" / "cbdb_20260627.sqlite3",
         ]
     )
     for path in candidates:

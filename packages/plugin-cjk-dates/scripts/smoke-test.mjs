@@ -19,7 +19,7 @@ const registerSourcePath = path.join(packageRoot, 'src/register.ts');
 const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/cjkDatesUi.ts';
 const hostUiPath = [
   process.env.GROGNARD_HOST_ROOT,
-  path.resolve(packageRoot, '../../../leaf-writer'),
+  path.resolve(packageRoot, '../../../grognard'),
   path.resolve(packageRoot, '../../../grognard'),
 ]
   .filter(Boolean)

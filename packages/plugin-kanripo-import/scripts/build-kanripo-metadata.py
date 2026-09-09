@@ -138,9 +138,9 @@ def _load_normalized_hints(path: Path) -> tuple[dict[str, dict], dict[tuple[str,
 def _default_person_pack_roots() -> list[Path]:
     root = _plugin_root()
     candidates = [
-        root.parents[2] / "authority extraction" / "packs" / "wikidata",
         root.parents[2] / "authoritypacks" / "packs" / "wikidata",
-        root.parents[3] / "authority extraction" / "packs" / "wikidata",
+        root.parents[2] / "authoritypacks" / "packs" / "wikidata",
+        root.parents[3] / "authoritypacks" / "packs" / "wikidata",
         root.parents[3] / "authoritypacks" / "packs" / "wikidata",
     ]
     env = os.environ.get("GROGNARD_WIKIDATA_PERSON_PACK_ROOT", "").strip()

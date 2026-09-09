@@ -12,7 +12,7 @@ const registerPath = path.join(packageRoot, 'dist/register.mjs');
 const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/daozangImportUi.ts';
 const hostUiPath = [
   process.env.GROGNARD_HOST_ROOT,
-  path.resolve(packageRoot, '../../../leaf-writer'),
+  path.resolve(packageRoot, '../../../grognard'),
 ]
   .filter(Boolean)
   .map((root) => path.join(root, hostUiRel))

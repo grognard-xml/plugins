@@ -63,8 +63,8 @@ The build wants a `dila_id → {norbert_id, wikidata_qid}` table. It accepts CSV
 (`{dila_id: norbert_id}` or `{dila_id: {...}}`).
 
 Extract it from the **authority-extraction Norbert pack**:
-`authority extraction/dist/authority-packs/norbert/concordance.ndjson`
-(rebuild that pack from the `authority extraction/` repo if stale).
+`authoritypacks/dist/authority-packs/norbert/concordance.ndjson`
+(rebuild that pack from the `authoritypacks/` repo if stale).
 
 Each line is one concordance record; the ones we want have
 `metadata.matched.source == "dila"`:
@@ -80,7 +80,7 @@ Extraction (yields ~1,500 pairs as of the 2026-07-25 Norbert pack):
 ```bash
 python3 - <<'PY'
 import json
-src = "authority extraction/dist/authority-packs/norbert/concordance.ndjson"
+src = "authoritypacks/dist/authority-packs/norbert/concordance.ndjson"
 out = {}
 for line in open(src):
     if not line.strip():
@@ -96,7 +96,7 @@ PY
 Wikidata QIDs mostly arrive via `--authority-person` (the person authority XML
 carries a `Wikidata` ref per id), so the crosswalk can be Norbert-only. If you
 want QIDs in the crosswalk too, add them from
-`authority extraction/dist/authority-packs/wikidata/dila-wikidata-concordance.ndjson`.
+`authoritypacks/dist/authority-packs/wikidata/dila-wikidata-concordance.ndjson`.
 
 ---
 

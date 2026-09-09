@@ -2,7 +2,7 @@
 
 Hybrid plugin: clone CBETA (漢文電子佛典) works from GitHub, **split each work by
 juan**, and translate CBETA P5 markup to project TEI. Design and every
-keep/cut/standoff ruling: **[leaf-writer/docs/cbeta-import-planning.md](../../../leaf-writer/docs/cbeta-import-planning.md)**.
+keep/cut/standoff ruling: **[leaf-writer/docs/cbeta-import-planning.md](../../../grognard/docs/cbeta-import-planning.md)**.
 
 **Runtime:** `import` touches no network. The `cbeta-xml-p5` checkout is fetched
 once by an explicit **Sync corpus** action (`git clone --depth 1 --branch

@@ -48,8 +48,8 @@ SKQS_DYNASTY_NORBERT_ID: dict[str, int] = {
 def _default_labels_path() -> Path | None:
     root = Path(__file__).resolve().parents[3]
     candidates = [
-        root.parent / "authority extraction" / "norbert_public" / "dynasty-labels.json",
-        root.parents[1] / "authority extraction" / "norbert_public" / "dynasty-labels.json",
+        root.parent / "authoritypacks" / "norbert_public" / "dynasty-labels.json",
+        root.parents[1] / "authoritypacks" / "norbert_public" / "dynasty-labels.json",
     ]
     for path in candidates:
         if path.is_file():

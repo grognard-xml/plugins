@@ -47,7 +47,7 @@ if (!parallelPath && !ctextUrl && !wikisourceUrl) {
 
 const hostPython = [
   process.env.GROGNARD_PYTHON,
-  path.resolve(packageRoot, '../../../leaf-writer/apps/desktop/resources/python/bin/python3'),
+  path.resolve(packageRoot, '../../../grognard/apps/desktop/resources/python/bin/python3'),
   path.resolve(packageRoot, '../../../grognard/apps/desktop/resources/python/bin/python3'),
 ].find((candidate) => candidate && fs.existsSync(candidate));
 

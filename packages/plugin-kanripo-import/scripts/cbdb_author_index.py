@@ -378,8 +378,8 @@ def default_cbdb_persons_path(plugin_root: Path) -> Path | None:
         candidates.append(Path(env_path))
     candidates.extend(
         [
-            plugin_root.parents[2] / "authority extraction" / "packs" / "cbdb" / "persons.ndjson",
-            plugin_root.parents[3] / "authority extraction" / "packs" / "cbdb" / "persons.ndjson",
+            plugin_root.parents[2] / "authoritypacks" / "packs" / "cbdb" / "persons.ndjson",
+            plugin_root.parents[3] / "authoritypacks" / "packs" / "cbdb" / "persons.ndjson",
         ]
     )
     for path in candidates:
@@ -390,8 +390,8 @@ def default_cbdb_persons_path(plugin_root: Path) -> Path | None:
 
 def default_cbdb_concordance_path(plugin_root: Path) -> Path | None:
     candidates = [
-        plugin_root.parents[2] / "authority extraction" / "packs" / "wikidata" / "cbdb-wikidata-concordance.ndjson",
-        plugin_root.parents[3] / "authority extraction" / "packs" / "wikidata" / "cbdb-wikidata-concordance.ndjson",
+        plugin_root.parents[2] / "authoritypacks" / "packs" / "wikidata" / "cbdb-wikidata-concordance.ndjson",
+        plugin_root.parents[3] / "authoritypacks" / "packs" / "wikidata" / "cbdb-wikidata-concordance.ndjson",
     ]
     for path in candidates:
         if path.is_file():

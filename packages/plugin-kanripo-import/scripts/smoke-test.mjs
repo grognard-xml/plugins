@@ -14,7 +14,7 @@ const hostUiRel = 'packages/cwrc-leafwriter/src/plugins/hostModules/kanripoImpor
 const hostUiPath = [
   process.env.GROGNARD_HOST_ROOT,
   path.resolve(packageRoot, '../../../grognard'),
-  path.resolve(packageRoot, '../../../leaf-writer'),
+  path.resolve(packageRoot, '../../../grognard'),
 ]
   .filter(Boolean)
   .map((root) => path.join(root, hostUiRel))
