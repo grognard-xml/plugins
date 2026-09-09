@@ -178,7 +178,7 @@ def test_coverage_from_stamps():
 def test_coverage_from_legacy_ana_stamps():
     # Files imported before the switch to `type` carry `ana="…"` — still read.
     legacy = (
-        '<div type="juan"><p>甲乙<seg ana="grognard:parallel-punct">丙、丁。</seg>戊己庚</p></div>'
+        '<div type="juan"><p>甲乙<seg ana="ljb:parallel-punct">丙、丁。</seg>戊己庚</p></div>'
     )
     stamped = coverage_from_stamps(legacy)
     assert stamped["empty"] is False

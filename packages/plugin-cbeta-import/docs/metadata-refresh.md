@@ -43,7 +43,7 @@ Authority** — `Buddhist_Studies_Person_Authority.xml`. Local copies seen at
 DILA authority-databases distribution.
 
 Schema (`--schema`) — a checkout of CBETA's published RelaxNG/Schematron
-(`cbeta-p5.rng` / `.sch`). `loosen_schema.py` applies the `grognard-cbeta-loosen v2`
+(`cbeta-p5.rng` / `.sch`). `loosen_schema.py` applies the `ljb-cbeta-loosen v2`
 widenings; the `.sch` passes through unchanged.
 
 ```bash
