@@ -1,6 +1,6 @@
 # Grognard plugins
 
-Optional plugins for [Grognard](https://github.com/grognard/grognard): specialized tools that not every user needs, installed from **Tools → Plugins**.
+Optional plugins for [Grognard](https://github.com/grognard-xml/grognard): specialized tools that not every user needs, installed from **Tools → Plugins**.
 
 ## Layout
 

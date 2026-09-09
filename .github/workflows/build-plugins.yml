@@ -25,7 +25,7 @@ jobs:
       - name: Check out Grognard host (import plugin smoke tests)
         uses: actions/checkout@v4
         with:
-          repository: grognard/grognard
+          repository: grognard-xml/grognard
           path: leaf-writer
           fetch-depth: 1
       - name: Set up Python

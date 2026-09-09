@@ -20,7 +20,7 @@ re-import offline.
 - **Authority:** persons (`bdr:P…`) / places (`bdr:G…`) emitted as `@ref`
   URIs; names resolved later via the Wikidata P2477 crosswalk. No bundled pack.
 
-Full design and open questions: **[bdrc-import-planning.md](https://github.com/grognard/grognard/blob/main/docs/bdrc-import-planning.md)**
+Full design and open questions: **[bdrc-import-planning.md](https://github.com/grognard-xml/grognard/blob/main/docs/bdrc-import-planning.md)**
 in the host repo.
 
 ## Layout
