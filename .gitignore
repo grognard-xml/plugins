@@ -7,3 +7,6 @@ __pycache__/
 
 # Release staging (generated during build-release.mjs)
 release/.staging/
+
+# macOS
+.DS_Store
