@@ -818,7 +818,18 @@ function extractNorbertEntityData({ wrapper }) {
     const value = node.textContent?.trim();
     if (value) assertions.push({ element: "placeName", value, ref: node.getAttribute("ref") ?? void 0 });
   }
+  for (const node of Array.from(wrapper.children)) {
+    if (node.localName !== "placeName") continue;
+    if (node.parentElement?.localName === "nobleTitle") continue;
+    const value = node.textContent?.trim();
+    if (value) assertions.push({ element: "placeName", value, ref: node.getAttribute("ref") ?? void 0 });
+  }
   for (const node of descendants("officeName")) {
+    const value = node.textContent?.trim();
+    if (value) assertions.push({ element: "state", value, ref: node.getAttribute("ref") ?? void 0 });
+  }
+  for (const node of Array.from(wrapper.children)) {
+    if (node.localName !== "roleName") continue;
     const value = node.textContent?.trim();
     if (value) assertions.push({ element: "state", value, ref: node.getAttribute("ref") ?? void 0 });
   }
