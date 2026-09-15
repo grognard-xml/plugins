@@ -2,7 +2,7 @@
   "manifestVersion": "1.0.0",
   "id": "daozang-import",
   "name": "Daozang import",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Import 方瞳子源 Fang Tongzi Daozang transcriptions from a local file or Grognard corpus pack; no third-party downloads.",
   "author": "Daniel Patrick Morgan",
   "homepage": "https://github.com/grognard-xml/plugins/tree/main/packages/plugin-daozang-import",

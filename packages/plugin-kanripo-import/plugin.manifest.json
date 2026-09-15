@@ -2,7 +2,7 @@
   "manifestVersion": "1.0.0",
   "id": "kanripo-import",
   "name": "Kanripo import",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Clone Kanseki Repository (Kanripo) works and convert each juan to project TEI.",
   "author": "Daniel Patrick Morgan",
   "homepage": "https://github.com/grognard-xml/plugins/tree/main/packages/plugin-kanripo-import",
