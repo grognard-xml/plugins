@@ -75,6 +75,7 @@ class BodySegment(TypedDict):
     kind: str
     atom_indices: list[int]
     han: str
+    text: str  # same span as `han`, but keeping punctuation/other visible chars
 
 
 class RefSegment(TypedDict):
@@ -350,6 +351,13 @@ def _atoms_han(atoms: list[str], indices: list[int]) -> str:
     return "".join(atom for idx in indices for atom in [atoms[idx]] if HAN_RE.fullmatch(atom))
 
 
+def _atoms_text(atoms: list[str], indices: list[int]) -> str:
+    """Like ``_atoms_han`` but keeps every visible (non-markup) character,
+    punctuation included -- for punctuation-density checks, which need the
+    marks that ``_atoms_han``'s Han-only filter deliberately excludes."""
+    return "".join(atom for idx in indices for atom in [atoms[idx]] if not _is_markup(atom))
+
+
 def parse_body_segments(body_xml: str) -> list[BodySegment]:
     """Alternating basetext / commentary runs in document order."""
     atoms = _iter_xml_atoms_segmented(body_xml)
@@ -364,7 +372,14 @@ def parse_body_segments(body_xml: str) -> list[BodySegment]:
             return
         han = _atoms_han(atoms, indices)
         if han:
-            segments.append({"kind": kind, "atom_indices": indices.copy(), "han": han})
+            segments.append(
+                {
+                    "kind": kind,
+                    "atom_indices": indices.copy(),
+                    "han": han,
+                    "text": _atoms_text(atoms, indices),
+                }
+            )
         indices = []
 
     for idx, atom in enumerate(atoms):

@@ -44,6 +44,7 @@ class SegmentInfo(TypedDict):
     id: int
     kind: str
     han: str
+    text: str  # same span as `han`, but keeping punctuation for density checks
     han_start: int
     han_end: int
     has_punct: bool
@@ -146,6 +147,7 @@ def list_segments(body_xml: str) -> SegmentListResult:
             "id": seg_id,
             "kind": seg["kind"],
             "han": han,
+            "text": seg["text"],
             "han_start": cursor,
             "han_end": cursor + length,
             "has_punct": has_punct,
@@ -160,8 +162,18 @@ def list_segments(body_xml: str) -> SegmentListResult:
     return result
 
 
-def segment_is_adequately_punctuated(han: str, has_punct: bool) -> bool:
-    """Match TS ``segmentNeedsAiGap`` — adequate marks for coverage bar green."""
+def segment_is_adequately_punctuated(han: str, has_punct: bool, text: str | None = None) -> bool:
+    """Match TS ``segmentNeedsAiGap`` — adequate marks for coverage bar green.
+
+    ``han`` is Han-only (used for the short-segment classification and as
+    the density denominator); ``text`` is the same span with punctuation
+    kept, and is what the density numerator must be counted from -- ``han``
+    can never contain a punctuation mark by construction (see
+    ``_atoms_han``), so counting from it always yields zero density
+    regardless of how well the segment is actually punctuated. Defaults to
+    ``han`` for callers that don't have the punctuated text, which
+    reproduces the previous (broken) behavior rather than raising.
+    """
     if len(han) < MIN_SEGMENT_HAN:
         return has_punct
     if not has_punct:
@@ -169,7 +181,8 @@ def segment_is_adequately_punctuated(han: str, has_punct: bool) -> bool:
     han_count = len(han_only(han))
     if han_count == 0:
         return False
-    punct_count = sum(1 for ch in han if ch in AI_PUNCT_CHARS)
+    punct_source = han if text is None else text
+    punct_count = sum(1 for ch in punct_source if ch in AI_PUNCT_CHARS)
     return (punct_count / han_count) * 100 >= MIN_PUNCT_PER_100_HAN
 
 
@@ -187,7 +200,7 @@ def coverage_from_punctuation(body_xml: str) -> Coverage:
     intervals: list[tuple[int, int]] = []
     spans: list[dict[str, object]] = []
     for seg in segments:
-        if not segment_is_adequately_punctuated(seg["han"], seg["has_punct"]):
+        if not segment_is_adequately_punctuated(seg["han"], seg["has_punct"], seg["text"]):
             continue
         start, end = seg["han_start"], seg["han_end"]
         if end <= start:

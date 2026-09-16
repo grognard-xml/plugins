@@ -448,3 +448,20 @@ def test_coverage_from_punctuation_grows_after_marks():
     assert before["ratio"] == 0.0
     assert after["ratio"] > before["ratio"]
     assert after["covered_chars"] > 0
+
+
+def test_coverage_from_punctuation_long_segment_with_real_marks_counts_as_covered():
+    # Regression test: segment_is_adequately_punctuated's density check must
+    # be computed from the segment's punctuated text, not its Han-only
+    # extract (`han`), which structurally never contains a punctuation
+    # character (see _atoms_han) -- counting from `han` made the density
+    # check always fail for any segment >= MIN_SEGMENT_HAN (20 chars),
+    # regardless of how well punctuated it actually was.
+    from kanripo_import.ai_punct import MIN_SEGMENT_HAN, coverage_from_punctuation
+
+    han_chars = "甲乙丙丁戊己庚辛壬癸" * 3  # 30 Han chars, above MIN_SEGMENT_HAN
+    assert len(han_chars) >= MIN_SEGMENT_HAN
+    punctuated = "，".join(han_chars) + "。"
+    body = f'<div type="juan"><p>{punctuated}</p></div>'
+    cov = coverage_from_punctuation(body)
+    assert cov["ratio"] > 0.5

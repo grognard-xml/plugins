@@ -109,6 +109,20 @@ def cli_main() -> None:
         sys.stdout.write("\n")
         return
 
+    if op == "align_folder_sources":
+        from kanripo_import.paragraph_align import bridge_align_folder_sources
+
+        json.dump(bridge_align_folder_sources(payload), sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+
+    if op == "apply_paragraph_scoped":
+        from kanripo_import.paragraph_align import bridge_apply_paragraph_scoped
+
+        json.dump(bridge_apply_paragraph_scoped(payload), sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+
     if op == "ai_punct_list_segments":
         from kanripo_import.ai_punct import bridge_list_segments
 
