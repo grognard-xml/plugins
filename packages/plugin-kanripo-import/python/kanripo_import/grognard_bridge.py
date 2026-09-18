@@ -171,7 +171,7 @@ def cli_main() -> None:
     if not path.is_file():
         raise SystemExit(f"Kanripo file not found: {path}")
     normalize = payload.get("normalize") or "off"
-    if normalize not in ("off", "dpm", "hard_replacements"):
+    if normalize not in ("off", "dpm"):
         raise SystemExit(f"Unknown normalize mode: {normalize}")
 
     gaiji_dest = payload.get("gaiji_dest_dir")

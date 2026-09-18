@@ -21,6 +21,7 @@ import re
 from difflib import SequenceMatcher
 from typing import TypedDict
 
+from kanripo_import.normalize_tables import apply_hard_replacements
 from kanripo_import.parallel_punct import (
     HAN_RE,
     _is_p_open,
@@ -73,8 +74,13 @@ class ParagraphMatch(TypedDict):
 
 
 def normalize_para_key(text: str) -> str:
-    """Comparison key: Han characters only, so punctuation/whitespace/markup never matter."""
-    return han_only(text)
+    """Comparison key: Han characters only, with simp/trad variants collapsed
+    (``hard_replacements_table``) so punctuation/whitespace/markup/script
+    variants never matter for matching. This table is comparison-only — it
+    must never be applied to the transcription text itself, only to the key
+    used to find parallels.
+    """
+    return apply_hard_replacements(han_only(text))
 
 
 def split_paragraphs(text: str) -> list[str]:

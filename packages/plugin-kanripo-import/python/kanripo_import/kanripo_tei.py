@@ -11,10 +11,10 @@ from kanripo_import.edition import resolve_edition
 from kanripo_import.kanripo_gaiji import copy_gaiji_assets, gaiji_graphic_xml, resolve_kanripo_refs
 from kanripo_import.kanripo_io import extract_kanripo_metadata, load_kanripo_text
 from kanripo_import.metadata_xml import build_metadata_xml, work_metadata_to_dict
-from kanripo_import.normalize_tables import Normalizer, apply_hard_replacements
+from kanripo_import.normalize_tables import Normalizer
 from kanripo_import.work_metadata import lookup_work_metadata
 
-NormalizeMode = Literal["off", "dpm", "hard_replacements"]
+NormalizeMode = Literal["off", "dpm"]
 
 _PB_TAG_RE = re.compile(r"<pb:([^>]+)>")
 _PB_LINE_RE = re.compile(r"^\s*<pb:([^>]+)>\s*(¶)?\s*$")
@@ -89,8 +89,6 @@ def _apply_normalize_outside_pb(text: str, mode: NormalizeMode) -> str:
         return text
     if mode == "dpm":
         mapper = Normalizer.from_package_data().normalize_text
-    elif mode == "hard_replacements":
-        mapper = apply_hard_replacements
     else:
         raise ValueError(f"Unknown normalize mode: {mode}")
 

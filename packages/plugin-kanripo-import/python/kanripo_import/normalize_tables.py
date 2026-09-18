@@ -1,4 +1,15 @@
-"""Bundled character normalisation tables (DPM + hard replacements)."""
+"""Bundled character normalisation tables.
+
+The DPM variant table (``Normalizer``) is applied to transcription text
+itself during Kanripo import.
+
+The simp/trad "hard replacements" table (``hard_replacements_table`` /
+``apply_hard_replacements``) collapses characters with no functional
+difference for this corpus (e.g. 乎/於 -> 于, 炁 -> 氣) so they compare equal
+for n-gram/paragraph parallel-matching. It is comparison-only: never apply
+it to a transcription's actual output text, only to a text's derived
+matching/comparison key.
+"""
 
 from __future__ import annotations
 
