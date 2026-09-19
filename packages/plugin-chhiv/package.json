@@ -1,0 +1,16 @@
+{
+  "name": "@grognard/plugin-chhiv",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Character Handling for Historical Inscription Variants: palaeography tools for Grognard",
+  "grognardPlugin": true,
+  "type": "module",
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.3"
+  }
+}

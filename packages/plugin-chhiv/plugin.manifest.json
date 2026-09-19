@@ -1,0 +1,24 @@
+{
+  "manifestVersion": "1.0.0",
+  "id": "chhiv",
+  "name": "CHHIV",
+  "version": "0.1.0",
+  "description": "Character Handling for Historical Inscription Variants: palaeography tools for transcribing Chinese manuscripts and inscriptions.",
+  "author": "Daniel Patrick Morgan",
+  "homepage": "https://github.com/grognard-xml/plugins/tree/main/packages/plugin-chhiv",
+  "license": "GPL-2.0",
+  "grognard": {
+    "minVersion": "0.1.0"
+  },
+  "languages": ["zh-hant", "zh-hans", "lzh"],
+  "regions": ["east-asia", "china"],
+  "languagePrompt": {
+    "message": "CHHIV adds palaeography symbol and variant-character tools for Chinese manuscripts. Open Tools → Plugins to install it.",
+    "documentLanguages": ["zh-hant", "zh-hans", "lzh"]
+  },
+  "entry": {
+    "kind": "javascript",
+    "module": "dist/register.mjs"
+  },
+  "bundled": ["dist/register.mjs", "src/register.ts"]
+}
