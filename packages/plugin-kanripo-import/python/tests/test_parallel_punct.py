@@ -14,6 +14,7 @@ from kanripo_import.parallel_punct import (
     parse_wikisource_comm_segments,
     strip_wikisource_commentary,
 )
+from kanripo_import.parallel_punct import _slice_text_by_han_range, insert_heads
 
 
 def test_superset_parallel_merges_nearby_blocks():
@@ -74,6 +75,41 @@ def test_apply_punct_middle_and_stamp():
     assert "甲乙" in xml
     assert "己庚" in xml
     assert cov["spans"]
+
+
+def test_title_marks_are_transferred():
+    """《》 were missing from PUNCT_CHARS and were silently dropped (issue #59)."""
+    body = '<div type="juan"><p>周易本義首章</p></div>'
+    result = apply_parallel_punctuation(body, "《周易》本義。首章")
+    assert result["applied"] is True
+    assert "《周易》本義。" in result["body_xml"]
+
+
+def test_punct_survives_a_char_the_target_edition_lacks():
+    """A mark anchored on a Han char present in the parallel but missing from
+    the target body (a routine edition/digitization difference) must land on
+    the nearest character the alignment did resolve, not be dropped."""
+    body = '<div type="juan"><p>甲乙丁戊</p></div>'  # 丙 absent from this edition
+    result = apply_parallel_punctuation(body, "甲乙丙、丁戊。")
+    assert result["applied"] is True
+    assert "、" in result["body_xml"]
+
+
+def test_leading_title_mark_survives_a_char_the_target_edition_lacks():
+    body = '<div type="juan"><p>京房曰甲乙丙丁</p></div>'  # 洪範 absent from this edition
+    result = apply_parallel_punctuation(body, "京房曰：《洪範》甲乙丙丁。")
+    assert result["applied"] is True
+    assert "《" in result["body_xml"] and "》" in result["body_xml"]
+
+
+def test_ideographic_space_is_dropped_around_quotes():
+    """Kanripo citation separators (U+3000) must not survive next to 「」."""
+    body = '<div type="juan"><p>甲曰乙　丙曰丁</p></div>'
+    result = apply_parallel_punctuation(body, "甲曰：「乙。」丙曰：「丁。」")
+    assert result["applied"] is True
+    xml = result["body_xml"]
+    assert "　" not in xml
+    assert "甲曰：「乙。」丙曰：「丁。」" in xml
 
 
 def test_wrong_parallel_does_not_punctuate():
@@ -439,3 +475,103 @@ def test_finalize_skips_relocate_when_it_breaks_wellformedness(monkeypatch):
 
     monkeypatch.setattr(pp, "relocate_leading_comm_notes", break_relocate)
     assert pp._finalize_parallel_xml(body, punctuated) == punctuated
+
+
+def test_slice_by_han_range_includes_a_leading_opening_bracket():
+    # Trimming a longer merged excerpt down to one paragraph's Han window
+    # routinely starts right after a title-opening mark like 《 -- the mark
+    # itself isn't Han, so it was silently dropped from every such trim
+    # instead of merely landing just outside [han_start, han_end).
+    text = "前文結束。《廣雅》曰：「夜光者，月也。」"
+    assert _slice_text_by_han_range(text, 4, 11) == "《廣雅》曰：「夜光者，月"
+
+
+def test_slice_by_han_range_does_not_pull_in_the_excluded_prefixs_own_ending():
+    # The character right before the kept range can just as easily be the
+    # sentence-final punctuation of the *excluded* preceding content -- that
+    # must stay dropped, only genuine opening marks get pulled in.
+    text = "甲乙丙丁。戊己庚"
+    assert _slice_text_by_han_range(text, 4, 7) == "戊己庚"
+
+
+def test_insert_heads_strips_a_duplicate_stray_label_from_the_prior_p():
+    # The Kanripo raw source sometimes keeps a section's own label as
+    # unstamped trailing text inside the *previous* <p>, with no structural
+    # separation -- inserting a proper <head> for that same label must not
+    # leave it duplicated as both stray plain text and the new element.
+    body = (
+        '<div type="juan">'
+        '<p><seg type="grognard:parallel-punct">甲乙丙，丁戊己。</seg>月變色六</p>'
+        "<p>庚辛壬</p>"
+        "</div>"
+    )
+    han_start = len("甲乙丙丁戊己月變色六")
+    result = insert_heads(body, [(han_start, "section", "月變色六")])
+    assert result == (
+        '<div type="juan">'
+        '<p><seg type="grognard:parallel-punct">甲乙丙，丁戊己。</seg></p>'
+        '<div type="section"><head type="section">月變色六</head>'
+        "<p>庚辛壬</p>"
+        "</div></div>"
+    )
+
+
+def test_insert_heads_leaves_unrelated_trailing_text_alone():
+    # Only an EXACT match of the whole trailing bare-Han run is stripped --
+    # if it's longer than the heading (genuine unstamped body content, not
+    # just a duplicated label), nothing is removed.
+    body = '<div type="juan"><p>甲乙丙前情月變色六</p><p>庚辛壬</p></div>'
+    han_start = len("甲乙丙前情月變色六")
+    result = insert_heads(body, [(han_start, "section", "月變色六")])
+    assert "甲乙丙前情月變色六" in result
+    assert result.count("月變色六") == 2  # once in the untouched <p>, once in <head>
+
+
+def test_insert_heads_nests_subsections_inside_their_section_as_siblings_close():
+    # TEI's content model only allows <head> before any <p> at a given div
+    # level -- a heading appearing after content has already started there
+    # needs a genuinely new nested <div>, not a sibling <head>. Two
+    # subsections under one section must land as sibling divs nested inside
+    # the section's own div, and a following section at the same level must
+    # close the whole section (and any subsection still open inside it).
+    body = '<div type="juan"><p>甲</p><p>乙</p><p>丙</p><p>丁</p><p>戊</p></div>'
+    result = insert_heads(
+        body,
+        [
+            (1, "section", "S1"),
+            (2, "subsection", "SS1"),
+            (3, "subsection", "SS2"),
+            (4, "section", "S2"),
+        ],
+    )
+    assert_well_formed(result)
+    assert result == (
+        '<div type="juan"><p>甲</p>'
+        '<div type="section"><head type="section">S1</head><p>乙</p>'
+        '<div type="subsection"><head type="subsection">SS1</head><p>丙</p></div>'
+        '<div type="subsection"><head type="subsection">SS2</head><p>丁</p></div>'
+        "</div>"
+        '<div type="section"><head type="section">S2</head><p>戊</p></div>'
+        "</div>"
+    )
+
+
+def test_insert_heads_second_chapter_becomes_a_new_sibling_div():
+    # A second "chapter"-level heading landing mid-document (each of several
+    # combined reference-source files contributes its own file-opening
+    # line) must close the first chapter's div -- including anything nested
+    # inside it -- rather than produce an invalid second top-level <head>.
+    body = '<div type="juan"><p>甲</p><p>乙</p><p>丙</p></div>'
+    result = insert_heads(
+        body,
+        [(0, "chapter", "C1"), (1, "section", "S1"), (2, "chapter", "C2")],
+    )
+    assert_well_formed(result)
+    assert result == (
+        '<div type="juan">'
+        '<div type="chapter"><head type="chapter">C1</head><p>甲</p>'
+        '<div type="section"><head type="section">S1</head><p>乙</p></div>'
+        "</div>"
+        '<div type="chapter"><head type="chapter">C2</head><p>丙</p></div>'
+        "</div>"
+    )

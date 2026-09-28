@@ -7,12 +7,20 @@ Unmatched prefix/suffix stay as-is. Wrong text → no overlap (empty coverage).
 from __future__ import annotations
 
 import re
+from bisect import bisect_left, bisect_right
 from difflib import SequenceMatcher
 from typing import TypedDict
 from xml.etree import ElementTree as ET
 
 HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
-PUNCT_CHARS = set("。，、：；？！「」『』（）〔〕.,;:!?")
+# Marks copied from a parallel onto the Kanripo body. Keep in sync with
+# ``AI_PUNCT_CHARS`` in ai_punct.py for the shared CJK set (《》· included).
+# Title marks 《》 were missing here and were silently dropped on every transfer.
+PUNCT_CHARS = set("。，、：；？！「」『』·《》（）〔〕.,;:!?")
+# The subset of PUNCT_CHARS that opens a bracketed/quoted stretch rather than
+# closing or ending one — see _slice_text_by_han_range, which only ever
+# extends its start boundary backward through characters in this set.
+_OPENING_PUNCT_CHARS = set("「『《（〔")
 # Marker for a stretch whose punctuation was copied from a parallel witness.
 # Carried on `<seg type="…">`, not `@ana`: the CBETA P5 customization drops
 # `att.global.analytic` entirely (no `@ana` on any element), and even in
@@ -612,6 +620,49 @@ def _sticker_to_tape_map(sticker_han: str, tape: str, tape_start: int, tape_end:
     return mapping
 
 
+
+# How far (in sticker-Han-index positions) an "after"/"before" lookup may
+# bridge across an unmapped alignment gap before giving up. A handful of
+# unmapped characters between one edition's digitization and another's
+# (a dropped duplicate character, an OCR slip, a resolved variant the
+# `replace` pairing couldn't line up) is routine; beyond this the two
+# witnesses have likely diverged for real, and guessing a placement would do
+# more harm than dropping the mark.
+_MAX_GAP_BRIDGE = 6
+
+
+def _nearest_mapped(
+    mapping: dict[int, int],
+    sorted_keys: list[int],
+    idx: int,
+    *,
+    direction: str,
+    max_gap: int = _MAX_GAP_BRIDGE,
+) -> int | None:
+    """Nearest mapped sticker-Han index to ``idx``, within ``max_gap``.
+
+    ``_sticker_to_tape_map`` only has entries for "equal"/"replace" opcode
+    runs — a Han character present in one witness but not the other falls in
+    a gap with no entry at all. A punctuation mark anchored exactly on such a
+    gap used to be silently discarded rather than merely landing one
+    character off; this walks outward to the nearest character the fuzzy
+    alignment *did* resolve (backward for marks that sit after a character,
+    forward for marks that sit before one).
+    """
+    if idx in mapping:
+        return mapping[idx]
+    if direction == "back":
+        pos = bisect_right(sorted_keys, idx) - 1
+    else:
+        pos = bisect_left(sorted_keys, idx)
+    if pos < 0 or pos >= len(sorted_keys):
+        return None
+    key = sorted_keys[pos]
+    if abs(key - idx) > max_gap:
+        return None
+    return mapping[key]
+
+
 def _collect_insertions(
     parallel_text: str,
     tape: str,
@@ -620,20 +671,40 @@ def _collect_insertions(
     sticker_han: str,
     *,
     split_sentences: bool = True,
-) -> tuple[dict[int, str], set[int]]:
-    insertions: dict[int, str] = {}
+) -> tuple[dict[int, str], dict[int, str], set[int]]:
+    """Map parallel punctuation onto tape Han indices.
+
+    Returns ``(after, before, para_after)``. Most marks (。、「, closing 》) sit
+    after the preceding Han character. Marks that open a stretch before any
+    Han is seen (typical for a paragraph-initial 《title》) go in ``before`` for
+    the next mapped Han character — otherwise leading 《 was silently dropped.
+    """
+    after: dict[int, str] = {}
+    before: dict[int, str] = {}
     para_after: set[int] = set()
     sticker_to_sub = _sticker_to_tape_map(sticker_han, tape, tape_start, tape_end)
+    sorted_keys = sorted(sticker_to_sub)
     span = tape_end - tape_start
     han_in_sticker = 0
     pending_nl = 0
+    pending_before = ""
     for char in parallel_text.replace("\r\n", "\n").replace("\r", "\n"):
         if HAN_RE.fullmatch(char):
             if pending_nl >= 2:
-                local = sticker_to_sub.get(han_in_sticker - 1)
+                local = _nearest_mapped(
+                    sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back"
+                )
                 if local is not None and 0 <= local < span:
                     para_after.add(tape_start + local)
             pending_nl = 0
+            if pending_before:
+                local = _nearest_mapped(
+                    sticker_to_sub, sorted_keys, han_in_sticker, direction="forward"
+                )
+                if local is not None and 0 <= local < span:
+                    at = tape_start + local
+                    before[at] = before.get(at, "") + pending_before
+                pending_before = ""
             han_in_sticker += 1
             continue
         if char == "\n":
@@ -641,13 +712,18 @@ def _collect_insertions(
             continue
         pending_nl = 0
         if char in PUNCT_CHARS:
-            local = sticker_to_sub.get(han_in_sticker - 1)
+            if han_in_sticker == 0:
+                pending_before += char
+                continue
+            local = _nearest_mapped(
+                sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back"
+            )
             if local is not None and 0 <= local < span:
                 at = tape_start + local
-                insertions[at] = insertions.get(at, "") + char
+                after[at] = after.get(at, "") + char
                 if split_sentences and char in SENTENCE_END_PUNCT:
                     para_after.add(at)
-    return insertions, para_after
+    return after, before, para_after
 
 
 def _comm_note_atom(atom: str) -> bool:
@@ -716,8 +792,20 @@ def _is_p_open(atom: str) -> bool:
 
 
 def _is_insignificant_whitespace_atom(atom: str) -> bool:
-    """True for atoms that only carry formatting between XML tags."""
-    return atom in ("\n", "\r", "\t") or (len(atom) > 0 and atom.strip() == "")
+    """True for atoms that only carry layout between characters or tags.
+
+    Includes ordinary spaces/tabs/newlines and the ideographic space U+3000
+    that Mandoku/Kanripo uses between citations. Chinese text does not use
+    inter-character space, so these must be dropped when rewriting the body
+    (see ``_emit_atom``), not only skipped when looking ahead for notes.
+    """
+    return atom in ("\n", "\r", "\t", "　") or (len(atom) > 0 and atom.strip() == "")
+
+
+def _emit_atom(out: list[str], atom: str) -> None:
+    """Append ``atom`` unless it is insignificant whitespace."""
+    if not _is_insignificant_whitespace_atom(atom):
+        out.append(atom)
 
 
 def _paragraph_open_index(atoms: list[str], index: int) -> int | None:
@@ -810,7 +898,8 @@ def _apply_han_jobs(
         return body_xml, [], []
     atoms = _iter_xml_atoms_segmented(body_xml)
     tape, _ = _han_tape(atoms)
-    insertions: dict[int, str] = {}
+    insertions_after: dict[int, str] = {}
+    insertions_before: dict[int, str] = {}
     para_after: set[int] = set()
     stamp_ranges: list[tuple[int, int]] = []
     spans: list[CoverageSpan] = []
@@ -829,7 +918,7 @@ def _apply_han_jobs(
         abs_start = tape_start + sub_overlap[0]
         abs_end = tape_start + sub_overlap[1]
         stamp_ranges.append((abs_start, abs_end))
-        seg_ins, seg_para = _collect_insertions(
+        seg_after, seg_before, seg_para = _collect_insertions(
             parallel_text,
             tape,
             abs_start,
@@ -837,8 +926,10 @@ def _apply_han_jobs(
             sticker,
             split_sentences=label != "comm",
         )
-        for key, value in seg_ins.items():
-            insertions[key] = insertions.get(key, "") + value
+        for key, value in seg_after.items():
+            insertions_after[key] = insertions_after.get(key, "") + value
+        for key, value in seg_before.items():
+            insertions_before[key] = insertions_before.get(key, "") + value
         para_after.update(seg_para)
         preview = tape[abs_start:abs_end][:40]
         spans.append(
@@ -905,9 +996,12 @@ def _apply_han_jobs(
             opened_here, stamp_depth = _open_stamp_if_needed(
                 out, han_seen, opened_here, stamp_depth, in_stamp
             )
-        out.append(atom)
+            prefix = insertions_before.get(han_seen, "")
+            if prefix:
+                out.append(prefix)
+        _emit_atom(out, atom)
         if is_han:
-            extra = insertions.get(han_seen, "")
+            extra = insertions_after.get(han_seen, "")
             if extra:
                 out.append(extra)
             if (
@@ -933,7 +1027,20 @@ def _apply_han_jobs(
 
 
 def _slice_text_by_han_range(text: str, han_start: int, han_end: int) -> str:
-    """Extract a substring covering Han indices ``[han_start, han_end)`` plus trailing punct."""
+    """Extract a substring covering Han indices ``[han_start, han_end)``, plus
+    trailing punctuation after the last kept Han character and opening
+    punctuation (``「『《（〔``) immediately before the first one.
+
+    Trimming a citation down to a Han-index window (e.g. one paragraph's
+    matched slice of a longer, merged parallel excerpt) routinely starts
+    right after a title/quote-opening mark like ``《`` — the mark itself
+    isn't Han, so it was never part of the kept range, and without this it
+    was silently dropped from every trim rather than merely landing outside
+    ``[han_start, han_end)``. Only *opening* marks are pulled in: the
+    character right before ``start_char`` could just as easily be the
+    sentence-final punctuation of the *excluded* preceding content (a
+    dropped ``。`` or ``，``), which must stay dropped.
+    """
     if han_start >= han_end:
         return ""
     han_count = 0
@@ -949,6 +1056,8 @@ def _slice_text_by_han_range(text: str, han_start: int, han_end: int) -> str:
                 break
     if start_char is None:
         return ""
+    while start_char > 0 and text[start_char - 1] in _OPENING_PUNCT_CHARS:
+        start_char -= 1
     while end_char < len(text) and not HAN_RE.fullmatch(text[end_char]):
         end_char += 1
     return text[start_char:end_char]
@@ -1178,7 +1287,7 @@ def _apply_parallel_at_range(
     ``<seg type="grognard:parallel-punct">`` stamp and ``</p><p>`` reflow splits are
     suppressed there — commentary is punctuated, never wrapped or reflowed.
     """
-    insertions, para_after = _collect_insertions(
+    insertions_after, insertions_before, para_after = _collect_insertions(
         match_text,
         tape,
         tape_start,
@@ -1237,9 +1346,12 @@ def _apply_parallel_at_range(
                 out.append(SEG_OPEN)
                 opened_here += 1
                 stamp_depth += 1
-        out.append(atom)
+            prefix = insertions_before.get(han_seen, "")
+            if prefix:
+                out.append(prefix)
+        _emit_atom(out, atom)
         if is_han:
-            extra = insertions.get(han_seen, "")
+            extra = insertions_after.get(han_seen, "")
             if extra:
                 out.append(extra)
             if (
@@ -1574,3 +1686,90 @@ def _parse_fragment(xml: str) -> ET.Element:
 def assert_well_formed(xml: str) -> None:
     """Raise if ``xml`` is not a well-formed fragment (wrapped for parse)."""
     _parse_fragment(xml)
+
+
+def _strip_duplicate_heading_tail(out: list[str], heading_text: str) -> None:
+    """Remove a plain-text run right before ``out``'s current end (skipping
+    over a trailing ``</p>``, if any) whose Han content exactly matches
+    ``heading_text``.
+
+    The Kanripo raw source sometimes keeps a section's own label as
+    unstamped trailing text inside the *previous* ``<p>``, with no
+    structural separation from it — inserting a proper ``<head>`` for that
+    same label (from the reference witness, via the position it anchors on)
+    would otherwise leave it duplicated: once as stray plain text, once as
+    the new element. Exact-match only, over the whole trailing run — this
+    never risks eating unrelated content the way a suffix match could.
+    """
+    heading_han = han_only(heading_text)
+    if not heading_han:
+        return
+    end = len(out)
+    if end > 0 and out[end - 1] == "</p>":
+        end -= 1
+    start = end
+    while start > 0 and HAN_RE.fullmatch(out[start - 1]):
+        start -= 1
+    if han_only("".join(out[start:end])) == heading_han:
+        del out[start:end]
+
+
+_HEAD_LEVEL_RANK = {"chapter": 0, "section": 1, "subsection": 2}
+
+
+def insert_heads(body_xml: str, insertions: list[tuple[int, str, str]]) -> str:
+    """Wrap ``<div type="…"><head type="…">text</head>…</div>`` around each
+    stretch starting at a given Han-tape position.
+
+    ``insertions`` is a list of ``(han_start, level, text)`` triples — the
+    same ``han_start`` a ``RefParagraph`` (see paragraph_align.py) carries
+    for the paragraph a heading should precede; ``level`` is ``"chapter"``,
+    ``"section"`` or ``"subsection"``. A ``han_start`` that isn't itself the
+    start of a fresh ``<p>`` (e.g. a mid-paragraph, ideographic-space-
+    separated citation unit) is silently skipped — a heading can only start
+    at a ``<p>`` boundary, and guessing a mid-paragraph placement would be
+    worse than omitting it.
+
+    TEI's content model only allows ``<head>`` *before* any ``<p>`` at a
+    given div level — one appearing after content has already started there
+    needs a genuinely new nested ``<div>``, not a sibling ``<head>``. Every
+    insertion therefore closes any currently open div at its own level or
+    deeper (so a same-or-shallower heading properly ends a previous
+    section/subsection) before opening its own, keeping the nesting valid
+    regardless of how many headings land in a juan or in what order —
+    including the rare case of a second "chapter"-level heading landing
+    mid-document (multiple reference-source files can each contribute their
+    own file-opening line), which becomes a new top-level sibling div rather
+    than an invalid second top-level ``<head>``.
+    """
+    pending: dict[int, list[tuple[str, str]]] = {}
+    for han_start, level, text in insertions:
+        pending.setdefault(han_start, []).append((level, text))
+    if not pending:
+        return body_xml
+
+    out: list[str] = []
+    han_count = 0
+    open_levels: list[str] = []
+
+    def close_same_or_deeper(level: str) -> None:
+        rank = _HEAD_LEVEL_RANK.get(level, 1)
+        while open_levels and _HEAD_LEVEL_RANK.get(open_levels[-1], 1) >= rank:
+            open_levels.pop()
+            out.append("</div>")
+
+    for atom in _iter_xml_atoms_segmented(body_xml):
+        if atom == "</div>":
+            while open_levels:
+                open_levels.pop()
+                out.append("</div>")
+        if _is_p_open(atom) and han_count in pending:
+            for level, text in pending.pop(han_count):
+                _strip_duplicate_heading_tail(out, text)
+                close_same_or_deeper(level)
+                out.append(f'<div type="{level}"><head type="{level}">{text}</head>')
+                open_levels.append(level)
+        out.append(atom)
+        if HAN_RE.fullmatch(atom):
+            han_count += 1
+    return "".join(out)

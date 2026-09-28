@@ -348,6 +348,23 @@ def test_apply_paragraph_scoped_sources_trims_much_longer_source_sentence():
     assert "丙丁戊、" in result["body_xml"]
 
 
+def test_apply_paragraph_scoped_sources_keeps_opening_bracket_when_trimming():
+    # A paragraph-scoped match whose source excerpt is much longer than the
+    # target <p> gets trimmed down to its own Han window (see the previous
+    # test) -- when that window starts right after a title-opening mark like
+    # 《, the trim must not silently drop it.
+    body = '<div type="juan"><p>廣雅曰夜光者月也</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("0001", body)
+    long_source = "前文結束。《廣雅》曰：「夜光者，月也。」"
+    src = [_src("f1.txt", 0, long_source)]
+    matches = align_paragraphs(ref_paragraphs, src, length_prefilter_ratio=0)
+    assert matches[0]["match_type"] != "unmatched"
+
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert result["applied"] is True
+    assert "《廣雅》" in result["body_xml"]
+
+
 def test_bridge_apply_paragraph_scoped_end_to_end():
     body = "<div type=\"juan\"><p>甲乙丙</p></div>"
     matches = [
@@ -370,3 +387,112 @@ def test_bridge_apply_paragraph_scoped_end_to_end():
     result = bridge_apply_paragraph_scoped(payload)
     assert result["applied"] is True
     assert "甲、乙、丙。" in result["body_xml"]
+
+
+def test_extract_source_paragraphs_tags_heading_levels_and_strips_markers():
+    # Modeled on the real ctext corpus's 01.txt, which stacks a work-title-
+    # plus-juan-number line and a separate chapter-title line, both unmarked,
+    # before the first `*`-marked section -- one of the rare files (2 of 118)
+    # where the general "block 1 defaults to section" rule (validated as the
+    # better default against the corpus's other 24 already-marked files)
+    # over-promotes that second unmarked line. Accepted trade-off; see
+    # extract_source_paragraphs's docstring.
+    text = "開元占經 卷一\n\n天地名體\n\n*天體渾宗\n\n甲乙丙。"
+    paras = extract_source_paragraphs("f1.txt", text)
+    assert [(p["text"], p["heading"]) for p in paras] == [
+        ("開元占經 卷一", "chapter"),
+        ("天地名體", "section"),
+        ("天體渾宗", "section"),
+        ("甲乙丙。", None),
+    ]
+
+
+def test_subsection_marker_and_leading_run_stops_at_first_marker():
+    # Modeled on 28.txt: chapter (unmarked) -> one `*` section -> several
+    # `**` subsections, each still recognized even though the leading-titles
+    # run already ended at the first marker.
+    text = "歲星占六\n\n*歲星犯石氏中官\n\n**歲星犯攝提一\n\n甲乙。\n\n**歲星犯大角二\n\n丙丁。"
+    paras = extract_source_paragraphs("f1.txt", text)
+    assert [(p["text"], p["heading"]) for p in paras] == [
+        ("歲星占六", "chapter"),
+        ("歲星犯石氏中官", "section"),
+        ("歲星犯攝提一", "subsection"),
+        ("甲乙。", None),
+        ("歲星犯大角二", "subsection"),
+        ("丙丁。", None),
+    ]
+
+
+def test_unmarked_file_gets_chapter_then_section_defaults():
+    # Modeled on 90.txt/50.txt: no `*`/`**` markup anywhere beyond the
+    # chapter line. Block 0 is the chapter; every other title-shaped block
+    # defaults to "section" (this can't tell "彗孛犯攝提一" apart from a true
+    # subsection the way a numbered-run-aware tool like the corpus's
+    # mark_headings.py script can -- it only has two buckets to work with:
+    # explicit marker, or this default). A block with real sentence
+    # punctuation is never a heading candidate at all, position or marker
+    # notwithstanding.
+    text = "彗星占下\n\n彗孛犯石氏中官一\n\n彗孛犯攝提一\n\n甲乙丙丁戊。\n\n己庚"
+    paras = extract_source_paragraphs("f1.txt", text)
+    assert [(p["text"], p["heading"]) for p in paras] == [
+        ("彗星占下", "chapter"),
+        ("彗孛犯石氏中官一", "section"),
+        ("彗孛犯攝提一", "section"),
+        ("甲乙丙丁戊。", None),
+        ("己庚", "section"),
+    ]
+
+
+def test_three_or_more_asterisks_do_not_match_a_marker_level():
+    # Not part of the convention (corpus-wide grep found only `*`/`**`), so
+    # `_HEADING_RE` doesn't match this at all -- it falls through to the
+    # ordinary "unmarked title-shaped block past index 0" default (section),
+    # asterisks and all, rather than being misread as some deeper level.
+    paras = extract_source_paragraphs("f1.txt", "甲乙。\n\n***丙丁")
+    assert paras[1]["heading"] == "section"
+    assert paras[1]["text"] == "***丙丁"
+
+
+def test_heading_paragraph_is_never_a_match_candidate():
+    # A short, generic title like "天地名體" would false-match somewhere
+    # unrelated in a long juan under ordinary fuzzy body-text matching --
+    # headings must be excluded from candidacy entirely.
+    ref = [_ref("0001", 0, "天地名體")]
+    src = extract_source_paragraphs("f1.txt", "天地名體")
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] == "unmatched"
+
+
+def test_heading_anchors_on_next_matched_paragraph_and_becomes_typed_head():
+    # The heading text never appears in the Kanripo body at all -- routine,
+    # since chapter/section titles are often dropped in transcription. It
+    # must still land correctly by anchoring on the next reference
+    # paragraph that *does* match ("甲乙丙").
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("0001", body)
+    src = extract_source_paragraphs(
+        "f1.txt", "開元占經 卷一\n\n天地名體\n\n*天體渾宗\n\n甲、乙、丙。"
+    )
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert result["applied"] is True
+    xml = result["body_xml"]
+    assert '<head type="chapter">開元占經 卷一</head>' in xml
+    assert '<head type="section">天地名體</head>' in xml
+    assert '<head type="section">天體渾宗</head>' in xml
+    assert (
+        xml.index("開元占經 卷一")
+        < xml.index("天地名體")
+        < xml.index("天體渾宗")
+        < xml.index("<p>")
+    )
+    assert "甲、乙、丙。" in xml
+
+
+def test_trailing_heading_with_nothing_matched_after_it_is_dropped():
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("0001", body)
+    src = extract_source_paragraphs("f1.txt", "甲、乙、丙。\n\n*附錄")
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert "<head" not in result["body_xml"]

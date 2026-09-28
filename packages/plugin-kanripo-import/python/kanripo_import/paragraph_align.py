@@ -37,6 +37,25 @@ _BLANK_LINE_RE = re.compile(r"\n\s*\n+")
 # no-op when the source is already fine-grained.
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？])")
 
+# A reference-source paragraph block prefixed with a run of 1 or 2 asterisks
+# is a structural heading, not running text: `*…` for a section, `**…` for a
+# subsection — an un-closed *prefix*, not a wrapped `**…**` pair. This
+# mirrors the convention already partially in use across the ctext corpus
+# itself (grep confirms zero closing asterisks and no run longer than 2 in
+# the whole corpus): reuse it rather than invent a new one that would force
+# rewriting the files that already have it. A file's very first paragraph
+# block is always its (always-unmarked) chapter/juan title — see
+# `extract_source_paragraphs`, not this regex, which only ever matches
+# `heading in {"section", "subsection"}`. A lone `*` immediately followed by
+# a third asterisk never matches here (`(?!\*)`), so it can't be confused
+# with a deeper level by accident.
+_HEADING_RE = re.compile(r"^(\*{1,2})(?!\*)(.+)$", re.DOTALL)
+_HEADING_LEVELS = {1: "section", 2: "subsection"}
+# A block with no sentence-ending punctuation at all is title-shaped — real
+# running text in this genre is citation-heavy and always ends a block in
+# one of these (the same signal `_SENTENCE_SPLIT_RE` already cuts blocks on).
+_SENTENCE_END_CHARS_RE = re.compile(r"[。！？]")
+
 DEFAULT_SIMILARITY_THRESHOLD = 0.85
 # Containment scoring (see `_containment_ratio`) is specifically designed to
 # handle large length mismatches -- a short Kanripo <p> fragment fully inside
@@ -52,6 +71,12 @@ class SourceParagraph(TypedDict):
     para_idx: int
     text: str
     key: str
+    # "chapter" | "section" | "subsection" | None. Set when this paragraph
+    # was a file's first block, or a `*…`/`**…`-prefixed block — `text`/
+    # `key` hold the marker-stripped title in that case, never matched
+    # against target body text (see `_BigramIndex`), only used to place a
+    # `<head>` via its neighbors (see `_resolve_heading_insertions`).
+    heading: str | None
 
 
 class RefParagraph(TypedDict):
@@ -171,8 +196,40 @@ def extract_ref_paragraphs(juan_id: str, body_xml: str) -> list[RefParagraph]:
 
 
 def extract_source_paragraphs(file_label: str, text: str) -> list[SourceParagraph]:
+    """Split ``text`` into paragraph units, tagging headings along the way.
+
+    Explicit ``*``/``**`` markers (see ``_HEADING_RE``) always win, at any
+    position in the file. Only block 0 -- the file's very first paragraph --
+    is unconditionally the chapter title. Checked against the ctext corpus's
+    own already-marked files: in the large majority of them the *second*
+    block (the first thing after the chapter line) is already the first
+    section; only a couple stack a second unmarked chapter-level line first
+    (e.g. a separate work-title and chapter-title line), with no textual
+    signal distinguishing that case from an ordinary first section. So every
+    title-shaped block from index 1 onward defaults to being a heading
+    (section, unless a marker says otherwise) -- matching the common case,
+    at the cost of occasionally over-eagerly promoting a rare stacked
+    second title line.
+
+    A block with sentence-ending punctuation is never a heading candidate
+    at all, marker or no -- real running text in this genre is
+    citation-heavy and always ends a block in one (the same signal
+    ``_SENTENCE_SPLIT_RE`` already cuts blocks on).
+    """
     paragraphs: list[SourceParagraph] = []
     for idx, para_text in enumerate(split_paragraphs(text)):
+        heading: str | None = None
+        if _SENTENCE_END_CHARS_RE.search(para_text):
+            pass  # real running text -- never a heading, marker or no
+        elif idx == 0:
+            heading = "chapter"
+        else:
+            heading_match = _HEADING_RE.match(para_text)
+            if heading_match:
+                heading = _HEADING_LEVELS[len(heading_match.group(1))]
+                para_text = heading_match.group(2).strip()
+            else:
+                heading = "section"
         key = normalize_para_key(para_text)
         if not key:
             continue
@@ -182,6 +239,7 @@ def extract_source_paragraphs(file_label: str, text: str) -> list[SourceParagrap
                 "para_idx": idx,
                 "text": para_text,
                 "key": key,
+                "heading": heading,
             }
         )
     return paragraphs
@@ -211,6 +269,15 @@ class _BigramIndex:
         self._paragraphs = source_paragraphs
         self._index: dict[str, list[int]] = {}
         for i, para in enumerate(source_paragraphs):
+            # Headings are short, generic titles ("天地名體") that would
+            # false-match somewhere unrelated in a long juan under ordinary
+            # body-text fuzzy matching. They never enter the bigram index —
+            # `source_paragraphs` still keeps their slot (so `by_file`/
+            # `text_by_key` para_idx lookups stay intact), they're just never
+            # returned as a matching candidate. See `_resolve_heading_insertions`
+            # for how they're placed instead.
+            if para.get("heading"):
+                continue
             for bg in _bigrams(para["key"]):
                 self._index.setdefault(bg, []).append(i)
 
@@ -588,6 +655,57 @@ def _trim_source_text_to_target(target_han: str, source_text: str) -> str:
     return trimmed or source_text
 
 
+def _resolve_heading_insertions(
+    ref_paragraphs: list[RefParagraph],
+    matches: list[ParagraphMatch],
+    source_paragraphs: list[SourceParagraph],
+) -> list[tuple[int, str, str]]:
+    """Where each ``**…**``/``***…***`` heading in the reference source(s)
+    should land in the target's Han tape.
+
+    A heading's own text is excluded from matching (see ``_BigramIndex``) —
+    it usually doesn't appear verbatim in the Kanripo source at all, since
+    chapter/section titles are routinely dropped in transcription. Instead,
+    each heading anchors on the *next* source paragraph in the same file
+    that did successfully match something: whatever position that
+    paragraph landed at is where the heading goes, right before it. A
+    trailing heading with nothing matched after it in its file is dropped —
+    there's no target position to anchor it to.
+    """
+    if not ref_paragraphs:
+        return []
+    juan_id = ref_paragraphs[0]["juan_id"]
+    ref_by_key = {(r["juan_id"], r["para_idx"]): r for r in ref_paragraphs}
+
+    matched_by_source: dict[tuple[str, int], int] = {}
+    for m in matches:
+        if m["match_type"] == "unmatched" or m["ref_juan_id"] != juan_id:
+            continue
+        ref = ref_by_key.get((m["ref_juan_id"], m["ref_para_idx"]))
+        if ref is None:
+            continue
+        for idx in range(m["source_para_idx"], m["source_para_end_idx"] + 1):
+            matched_by_source.setdefault((m["source_file"], idx), ref["han_start"])
+
+    by_file: dict[str, list[SourceParagraph]] = {}
+    for src in source_paragraphs:
+        by_file.setdefault(src["file"], []).append(src)
+
+    insertions: list[tuple[int, str, str]] = []
+    for file, paras in by_file.items():
+        ordered = sorted(paras, key=lambda p: p["para_idx"])
+        for pos, src in enumerate(ordered):
+            level = src.get("heading")
+            if not level:
+                continue
+            for later in ordered[pos + 1 :]:
+                han_start = matched_by_source.get((file, later["para_idx"]))
+                if han_start is not None:
+                    insertions.append((han_start, level, src["text"]))
+                    break
+    return insertions
+
+
 def apply_paragraph_scoped_sources(
     body_xml: str,
     ref_paragraphs: list[RefParagraph],
@@ -619,6 +737,7 @@ def apply_paragraph_scoped_sources(
         _coverage_from_intervals,
         _han_tape,
         apply_scoped_parallel_punctuation,
+        insert_heads,
     )
 
     text_by_key: dict[tuple[str, int], str] = {
@@ -667,6 +786,14 @@ def apply_paragraph_scoped_sources(
             end = int(round(float(span["end"]) * total))
             intervals.append((start, end))
             spans.append(span)
+
+    # Han positions are stable across the punctuation insertions above (only
+    # non-Han marks are ever added), so the head positions resolved from the
+    # original ref_paragraphs still apply to the now-punctuated `xml`.
+    head_insertions = _resolve_heading_insertions(ref_paragraphs, matches, source_paragraphs)
+    if head_insertions:
+        xml = insert_heads(xml, head_insertions)
+        applied_any = True
 
     coverage: Coverage = _coverage_from_intervals(total, intervals, spans)
     result_payload: ParallelPunctResult = {
