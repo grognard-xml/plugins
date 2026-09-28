@@ -15,6 +15,7 @@ from kanripo_import.parallel_punct import (
     _atoms_han,
     _comm_note_follows,
     _coverage_from_intervals,
+    _emit_atom,
     _emit_paragraph_split,
     _empty_coverage,
     _han_tape,
@@ -299,7 +300,7 @@ def _apply_insertions_to_xml(body_xml: str, insertions: dict[int, str]) -> str:
     han_seen = -1
     for atom_index, atom in enumerate(atoms):
         is_han = (not _is_markup(atom)) and bool(HAN_RE.fullmatch(atom))
-        out.append(atom)
+        _emit_atom(out, atom)
         if is_han:
             han_seen += 1
             extra = insertions.get(han_seen, "")
@@ -353,10 +354,12 @@ def _purge_atoms(atoms: list[str], atom_indices: set[int] | None) -> list[str]:
     out: list[str] = []
     for idx, atom in enumerate(atoms):
         if atom_indices is not None and idx not in atom_indices:
-            out.append(atom)
+            _emit_atom(out, atom)
             continue
         if _is_markup(atom):
             out.append(atom)
+            continue
+        if _is_insignificant_whitespace_atom(atom):
             continue
         cleaned = "".join(ch for ch in atom if ch not in PURGE_PUNCT_CHARS)
         if cleaned:
@@ -374,6 +377,8 @@ def _purge_atoms_by_han_range(atoms: list[str], han_start: int, han_end: int) ->
     for atom in atoms:
         if _is_markup(atom):
             out.append(atom)
+            continue
+        if _is_insignificant_whitespace_atom(atom):
             continue
         if HAN_RE.fullmatch(atom):
             han_seen += 1
@@ -556,7 +561,7 @@ def reflow_paragraphs(body_xml: str) -> str:
             in_comm_note = False
         is_han = (not _is_markup(atom)) and bool(HAN_RE.fullmatch(atom))
         stamp_depth, other_seg_depth = _stamp_depth_delta(atom, stamp_depth, other_seg_depth)
-        out.append(atom)
+        _emit_atom(out, atom)
         if is_han:
             han_seen += 1
             if (
