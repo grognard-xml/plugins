@@ -673,11 +673,13 @@ def test_adjacent_quote_open_is_not_duplicated_across_a_seg_boundary():
     # Real case (KR3g0018_006): the Kanripo raw text splits one citation into
     # two separate <p> units right at the seam between an attribution and its
     # quoted content ("京氏曰" | "日出于夕..."), so each half is matched
-    # independently. The first half correctly picks up the source's "：「" as
-    # its own trailing mark; the second half, matched on its own, finds that
-    # same "「" immediately before its own first Han character in the source
-    # and re-attaches it as a leading mark -- producing a visually doubled
-    # "「「" even though each insertion was individually correct.
+    # independently. Before the _collect_insertions fix (see
+    # test_opening_mark_lands_before_the_next_han_not_after_the_previous_one),
+    # both halves claimed the source's "「" -- the first as its own trailing
+    # mark, the second (independently) as its own leading mark -- producing a
+    # visually doubled "「「". The opening-mark-always-leads-forward fix makes
+    # the first half stop claiming it at all, so there is nothing left to
+    # deduplicate: the mark lands once, on the paragraph it actually opens.
     body = '<div type="juan"><p>京氏曰</p><p>日出于夕人君不祥社稷亡</p></div>'
     ref_paragraphs = extract_ref_paragraphs("1", body)
     source_text = "又曰：「日暮而出，是謂陰重，天下見兵。」京氏曰：「日出于夕，人君不祥，社稷亡。」"
@@ -685,5 +687,5 @@ def test_adjacent_quote_open_is_not_duplicated_across_a_seg_boundary():
     matches = align_paragraphs(ref_paragraphs, src)
     result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
     assert "「「" not in result["body_xml"]
-    assert "京氏曰：「" in result["body_xml"]
-    assert "日出于夕，人君不祥，社稷亡。」" in result["body_xml"]
+    assert "京氏曰：</seg><seg" in result["body_xml"]
+    assert "「日出于夕，人君不祥，社稷亡。」" in result["body_xml"]

@@ -867,7 +867,7 @@ def _trim_source_text_to_target(target_han: str, source_text: str) -> str:
     source_han = han_only(source_text)
     if not target_han or not source_han:
         return source_text
-    if len(source_han) <= len(target_han) * 1.2:
+    if source_han == target_han:
         return source_text
     matcher = SequenceMatcher(a=target_han, b=source_han, autojunk=False)
     blocks = [b for b in matcher.get_matching_blocks() if b.size > 0]

@@ -736,7 +736,16 @@ def _collect_insertions(
             continue
         pending_nl = 0
         if char in PUNCT_CHARS:
-            if han_in_sticker == 0:
+            # An opening mark (「『《（〔) always belongs to whatever Han
+            # character comes *next*, not to the one before it -- gluing it
+            # onto the preceding character is harmless when both sit in the
+            # same stamped span, but wrong whenever a structural boundary
+            # (a comm note closing, two independently-matched paragraphs,
+            # etc.) falls between them: the mark would render on the wrong
+            # side of that boundary. Buffer it the same way a mark seen
+            # before any Han at all is already buffered, rather than only
+            # doing that at the very start of the text.
+            if han_in_sticker == 0 or char in _OPENING_PUNCT_CHARS:
                 pending_before += char
                 continue
             local = _nearest_mapped(

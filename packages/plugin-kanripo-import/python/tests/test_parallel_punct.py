@@ -336,6 +336,27 @@ def test_segmented_stamp_splits_around_note():
     assert_well_formed(xml)
 
 
+def test_opening_mark_after_a_note_lands_outside_it_not_inside():
+    # Real case (KR3g0018_006): a title's opening "《" immediately follows a
+    # comm note's closing "。}}" in the reference text. _collect_insertions
+    # used to glue every mark -- including an opening one -- onto whichever
+    # Han character came right before it, so "《" landed on the note's own
+    # last character and rendered *inside* `</note>`, stranding the title
+    # text after it with no opening bracket at all. An opening mark now
+    # always buffers forward for the Han character that follows it, so it
+    # lands on the correct side of the note boundary.
+    body = (
+        '<div type="juan"><p>甲乙<note type="comm">丙丁</note>戊己</p></div>'
+    )
+    parallel = '甲、乙。<span class="inlinecomment">丙，丁。</span>《戊己》。'
+    result = apply_parallel_segmented(body, parallel)
+    assert result["applied"] is True
+    xml = result["body_xml"]
+    assert "丙，丁。</seg></note>" in xml
+    assert "</note><seg type=\"grognard:parallel-punct\">《戊己》。</seg>" in xml
+    assert_well_formed(xml)
+
+
 def test_reflow_merges_indented_kanripo_line_paragraphs():
     body = (
         '<div type="juan">\n'
