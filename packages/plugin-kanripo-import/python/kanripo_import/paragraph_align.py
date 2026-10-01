@@ -358,16 +358,6 @@ def _containment_ratio(key_a: str, key_b: str) -> float:
     return _coverage_count(key_a, key_b) / denom
 
 
-# Below this fraction of the ref key's own length, a single candidate's
-# perfect containment score is trusted far less -- it's covering the start
-# of a longer concatenated-citations ref paragraph, not the whole thing, and
-# align_paragraphs tries extending it with neighbors even though its own
-# score already cleared similarity_threshold. 0.9 rather than something
-# looser: a single citation's own sentence-internal padding (an opening
-# "...曰：" before its quote, etc.) can legitimately leave single-candidate
-# coverage a little under 1.0 without another citation actually following.
-_MIN_SINGLE_CANDIDATE_COVERAGE = 0.9
-
 # A single Kanripo <p> can concatenate well over a hundred short citations
 # with no separator at all between them (seen for real: 135 <seg> stamps
 # inside one <p>) -- this needs to be large enough that a long run like that
@@ -660,9 +650,20 @@ def align_paragraphs(
         # in ref["key"] in order -- nothing about whether ref["key"] has more
         # content *after* it that chosen alone doesn't cover (the
         # concatenated-citations case). Worth trying to extend whenever the
-        # single candidate accounts for well under all of the ref key's own
-        # length, regardless of its score.
-        low_coverage = len(chosen["key"]) < len(ref["key"]) * _MIN_SINGLE_CANDIDATE_COVERAGE
+        # single candidate doesn't account for the ref key's own full
+        # length, regardless of its score -- even a single trailing Han
+        # character short (94% coverage on a ~20-char citation, say) is
+        # enough to strand a title's opening bracket: a Kanripo <p>'s own
+        # ideographic-space split can land one character later than the
+        # ctext source's own sentence-boundary split, leaving that one
+        # character to come from the *next* source paragraph. No fixed
+        # tolerance here (the old 90%-of-length margin let exactly this
+        # class of gap through) -- _grow_merge_window only ever replaces the
+        # single match when growing genuinely improves coverage, so
+        # attempting it costs nothing on a short candidate that was already
+        # the correct, final answer (ordinary sentence-initial padding like
+        # an opening "...曰：" before a quote).
+        low_coverage = len(chosen["key"]) < len(ref["key"])
 
         if score < similarity_threshold or low_coverage:
             grown = _grow_merge_window(
