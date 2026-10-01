@@ -36,6 +36,29 @@ def test_split_paragraphs_further_splits_long_block_on_sentences():
     assert split_paragraphs(block) == ["甲乙丙。", "丁戊己！", "庚辛壬癸？"]
 
 
+def test_split_paragraphs_keeps_a_closing_quote_with_the_sentence_it_closes():
+    # A closing quote/bracket routinely sits right after the sentence-final
+    # mark that ends the quoted stretch ("...二年。」郗萌曰..."). Splitting
+    # right after 。 alone used to strand 」 as the *next* unit's leading
+    # character -- real bug, found by spot-checking a real import: every
+    # citation ending in 。」 lost its closing quote in the output.
+    block = "石氏曰：「彗星出攝提，期不出二年。」郗萌曰：「彗星出攝提，群下爭起。」"
+    assert split_paragraphs(block) == [
+        "石氏曰：「彗星出攝提，期不出二年。」",
+        "郗萌曰：「彗星出攝提，群下爭起。」",
+    ]
+
+
+def test_split_paragraphs_keeps_up_to_two_stacked_closing_marks():
+    # A quote ending right at a title's own close too (「《書》曰：...」) --
+    # both closing marks must stay with the sentence that just ended.
+    block = "甲曰：「《周易》曰：「乙丙丁。」」戊己庚。"
+    assert split_paragraphs(block) == [
+        "甲曰：「《周易》曰：「乙丙丁。」」",
+        "戊己庚。",
+    ]
+
+
 def test_extract_ref_paragraphs_from_body_xml():
     body = "<div type=\"juan\"><p>甲乙丙</p><p>丁戊己</p></div>"
     paras = extract_ref_paragraphs("0001", body)
@@ -132,6 +155,25 @@ def test_source_file_spans_multiple_juan():
     assert by_juan["0002"] == 1
 
 
+def test_cross_juan_boilerplate_match_is_allowed_and_punctuates_normally():
+    # Deliberately permissive by design: this genre repeats the same
+    # sentence verbatim across structurally similar entries in different
+    # juan, and borrowing punctuation for a genuinely identical sentence
+    # from wherever it's found is correct -- it only ever decorates the
+    # target's own, already-present Han characters, never adds new text.
+    # Which of two equally-good files supplies it is not asserted here
+    # (either is fine); only that the match is not rejected outright.
+    boilerplate = "歲星犯庫樓一"
+    ref = [_ref("3", 0, boilerplate)]
+    src = [
+        _src("03.txt", 0, boilerplate),
+        _src("08.txt", 0, boilerplate),  # a differently-numbered file, same text
+    ]
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] != "unmatched"
+    assert matches[0]["source_file"] in ("03.txt", "08.txt")
+
+
 def test_non_adjacent_same_file_matches_are_reassembled_into_one_block():
     # Two ref paragraphs both match the SAME source file but at non-adjacent
     # positions (an intervening source paragraph wasn't matched by anything).
@@ -216,6 +258,41 @@ def test_boundary_straddling_ref_paragraph_matches_via_source_merge():
     assert matches[0]["source_para_end_idx"] == 1
 
 
+def test_low_coverage_perfect_match_still_extends_to_cover_the_rest():
+    # Real bug, found by spot-checking a real import: two whole citations
+    # concatenated with no separator in the raw Kanripo text (routine --
+    # Kanripo's citation-boundary convention is an ideographic space, not
+    # guaranteed present) become ONE ref paragraph. The first citation's own
+    # source paragraph is a perfect, 1.0-scoring containment match (wholly
+    # found, in order, inside the combined ref key) -- but that only covers
+    # the first half, and a perfect score alone never used to trigger the
+    # merge-neighbors search the way a sub-threshold score does.
+    ref = [_ref("0001", 0, "甲乙丙丁戊己庚辛")]
+    src = [
+        _src("f1.txt", 0, "甲乙丙丁"),  # perfectly contained, but only half of ref
+        _src("f1.txt", 1, "戊己庚辛"),  # the rest
+    ]
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] == "merged"
+    assert matches[0]["source_para_idx"] == 0
+    assert matches[0]["source_para_end_idx"] == 1
+
+
+def test_high_coverage_single_match_is_not_needlessly_extended():
+    # A single candidate that already accounts for (almost) all of the ref
+    # key's own length must not be widened into a worse, needlessly-merged
+    # match just because a same-file neighbor happens to exist.
+    ref = [_ref("0001", 0, "甲乙丙丁")]
+    src = [
+        _src("f1.txt", 0, "甲乙丙丁"),  # exact, full-length match
+        _src("f1.txt", 1, "戊己庚辛"),  # unrelated neighbor
+    ]
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] == "exact"
+    assert matches[0]["source_para_idx"] == 0
+    assert matches[0]["source_para_end_idx"] == 0
+
+
 def test_merged_match_source_text_not_duplicated_in_juan_map():
     ref = [
         _ref("0001", 0, "丙丁戊己"),
@@ -248,6 +325,38 @@ def test_single_paragraph_match_still_preferred_over_merge():
     matches = align_paragraphs(ref, src)
     assert matches[0]["match_type"] == "exact"
     assert matches[0]["source_para_idx"] == matches[0]["source_para_end_idx"] == 0
+
+
+def test_merge_window_grows_past_a_long_run_of_short_citations():
+    # Real case found by spot-checking a real import: a single Kanripo <p>
+    # can concatenate well over a hundred short citations with no separator
+    # at all between them (observed for real: 135 <seg> stamps in one <p>).
+    # The old O(window^2) search, capped at a small window, could only ever
+    # match the first few before giving up -- the greedy, linear-growth
+    # search must reach the whole run regardless of its length.
+    n = 30
+    units = [f"甲{i}乙{i}丙{i}" for i in range(n)]
+    ref = [_ref("0001", 0, "".join(units))]
+    src = [_src("f1.txt", i, unit) for i, unit in enumerate(units)]
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] == "merged"
+    assert matches[0]["source_para_idx"] == 0
+    assert matches[0]["source_para_end_idx"] == n - 1
+
+
+def test_merge_window_growth_tolerates_a_non_improving_paragraph():
+    # Real case: one paragraph along a long run whose wording has drifted
+    # from this witness (routine edition variance) adds nothing to coverage
+    # on its own -- growth must not give up right there when the paragraph
+    # after it resumes covering real content, or it would silently truncate
+    # a long citation run at the first bit of noise.
+    units = ["甲一乙一丙一", "甲二乙二丙二", "完全不相關的文字無關", "甲四乙四丙四", "甲五乙五丙五"]
+    ref = [_ref("0001", 0, "".join(u for i, u in enumerate(units) if i != 2))]
+    src = [_src("f1.txt", i, unit) for i, unit in enumerate(units)]
+    matches = align_paragraphs(ref, src)
+    assert matches[0]["match_type"] == "merged"
+    assert matches[0]["source_para_idx"] == 0
+    assert matches[0]["source_para_end_idx"] == 4
 
 
 def test_length_prefilter_excludes_dissimilar_lengths_but_keeps_valid_match():
@@ -496,3 +605,85 @@ def test_trailing_heading_with_nothing_matched_after_it_is_dropped():
     matches = align_paragraphs(ref_paragraphs, src)
     result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
     assert "<head" not in result["body_xml"]
+
+
+def test_heading_from_a_differently_numbered_file_does_not_cross_into_this_juan():
+    # The real bug this guards against (KR3g0018_003 picking up a "太白占二"
+    # heading from an unrelated file): align_paragraphs may still cross-match
+    # one of 08.txt's *ordinary* paragraphs into juan "3" -- fine, see
+    # test_cross_juan_boilerplate_match_is_allowed_and_punctuates_normally,
+    # since that only ever decorates juan 3's own existing text. But 08.txt's
+    # own heading must never ride along into a juan it doesn't correspond to
+    # -- that would inject real foreign text, not just punctuation.
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("3", body)
+    src = extract_source_paragraphs("08.txt", "太白占二\n\n甲、乙、丙。")
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert "<head" not in result["body_xml"]
+    assert "甲、乙、丙。" in result["body_xml"]
+
+
+def test_heading_lands_normally_when_file_number_matches_juan_number():
+    # Positive control for the test above: the same shape, but the file's
+    # number genuinely corresponds to the target juan -- the heading must
+    # still land exactly as it did before this gate existed.
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("8", body)
+    src = extract_source_paragraphs("08.txt", "太白占二\n\n甲、乙、丙。")
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert '<head type="chapter">太白占二</head>' in result["body_xml"]
+
+
+def test_heading_gate_works_against_the_real_chinese_locator_juan_id():
+    # The gate above used a plain "8"/"3" juan_id as a simplification -- the
+    # Kanripo plugin's own meta.juan is actually a human-readable locator
+    # ("卷三"), never a bare digit, and an earlier version of this gate
+    # silently never engaged against real data because of exactly that gap
+    # (see _numeric_juan_key). Same shape as the two tests above, but with
+    # the real juan_id format this plugin actually produces.
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("卷三", body)
+    src = extract_source_paragraphs("08.txt", "太白占二\n\n甲、乙、丙。")
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert "<head" not in result["body_xml"]
+    assert "甲、乙、丙。" in result["body_xml"]
+
+
+def test_heading_gate_recognizes_front_matter_juan_ids_as_juan_zero():
+    # The table-of-contents juan's own juan_id is "目錄" (no numeral at all)
+    # but its pb markers (and this corpus's own ctext file "00.txt") number
+    # it as juan 0 by Kanripo's own front-matter convention.
+    body = '<div type="juan"><p>甲乙丙</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("目錄", body)
+    src = extract_source_paragraphs("08.txt", "太白占二\n\n甲、乙、丙。")
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert "<head" not in result["body_xml"]
+
+    src_own = extract_source_paragraphs("00.txt", "太白占二\n\n甲、乙、丙。")
+    matches_own = align_paragraphs(ref_paragraphs, src_own)
+    result_own = apply_paragraph_scoped_sources(body, ref_paragraphs, matches_own, src_own)
+    assert '<head type="chapter">太白占二</head>' in result_own["body_xml"]
+
+
+def test_adjacent_quote_open_is_not_duplicated_across_a_seg_boundary():
+    # Real case (KR3g0018_006): the Kanripo raw text splits one citation into
+    # two separate <p> units right at the seam between an attribution and its
+    # quoted content ("京氏曰" | "日出于夕..."), so each half is matched
+    # independently. The first half correctly picks up the source's "：「" as
+    # its own trailing mark; the second half, matched on its own, finds that
+    # same "「" immediately before its own first Han character in the source
+    # and re-attaches it as a leading mark -- producing a visually doubled
+    # "「「" even though each insertion was individually correct.
+    body = '<div type="juan"><p>京氏曰</p><p>日出于夕人君不祥社稷亡</p></div>'
+    ref_paragraphs = extract_ref_paragraphs("1", body)
+    source_text = "又曰：「日暮而出，是謂陰重，天下見兵。」京氏曰：「日出于夕，人君不祥，社稷亡。」"
+    src = extract_source_paragraphs("06.txt", source_text)
+    matches = align_paragraphs(ref_paragraphs, src)
+    result = apply_paragraph_scoped_sources(body, ref_paragraphs, matches, src)
+    assert "「「" not in result["body_xml"]
+    assert "京氏曰：「" in result["body_xml"]
+    assert "日出于夕，人君不祥，社稷亡。」" in result["body_xml"]

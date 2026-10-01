@@ -14,7 +14,12 @@ from kanripo_import.parallel_punct import (
     parse_wikisource_comm_segments,
     strip_wikisource_commentary,
 )
-from kanripo_import.parallel_punct import _slice_text_by_han_range, insert_heads
+from kanripo_import.parallel_punct import (
+    SEG_OPEN,
+    _dedupe_seg_boundary_marks,
+    _slice_text_by_han_range,
+    insert_heads,
+)
 
 
 def test_superset_parallel_merges_nearby_blocks():
@@ -575,3 +580,23 @@ def test_insert_heads_second_chapter_becomes_a_new_sibling_div():
         '<div type="chapter"><head type="chapter">C2</head><p>丙</p></div>'
         "</div>"
     )
+
+
+def test_dedupe_seg_boundary_marks_drops_the_second_of_a_duplicate_pair():
+    xml = f"甲{SEG_OPEN}京氏曰：「</seg>{SEG_OPEN}「日出于夕</seg>乙"
+    assert _dedupe_seg_boundary_marks(xml) == (
+        f"甲{SEG_OPEN}京氏曰：「</seg>{SEG_OPEN}日出于夕</seg>乙"
+    )
+
+
+def test_dedupe_seg_boundary_marks_leaves_a_single_mark_alone():
+    xml = f"甲{SEG_OPEN}京氏曰：「</seg>{SEG_OPEN}日出于夕</seg>乙"
+    assert _dedupe_seg_boundary_marks(xml) == xml
+
+
+def test_dedupe_seg_boundary_marks_leaves_different_marks_alone():
+    # Not a duplicate -- two genuinely different opening marks landing on
+    # either side of a seg boundary (a title mark, then an unrelated quote)
+    # must not be touched.
+    xml = f"甲{SEG_OPEN}書《</seg>{SEG_OPEN}「日出于夕</seg>乙"
+    assert _dedupe_seg_boundary_marks(xml) == xml

@@ -21,6 +21,30 @@ PUNCT_CHARS = set("。，、：；？！「」『』·《》（）〔〕.,;:!?")
 # closing or ending one — see _slice_text_by_han_range, which only ever
 # extends its start boundary backward through characters in this set.
 _OPENING_PUNCT_CHARS = set("「『《（〔")
+# Two independently-matched ref paragraphs can each legitimately claim the
+# same opening mark from the source: one as an "after" mark trailing its own
+# last Han character (e.g. an attribution "...曰：「" ending one paragraph),
+# the other as a "before" mark leading its own first Han character (the
+# quoted content that paragraph itself begins with, "「...」"), when the
+# source text the two paragraphs matched against actually has only one such
+# mark sitting right at the seam between them. Each insertion is correct in
+# isolation -- the duplication only exists across the pair. Collapse a run of
+# 1-2 opening marks that lands identically on both sides of a `<seg>`
+# boundary, keeping the first (closing side) copy and dropping the second
+# (opening side) one, since a quote-open mark reads naturally as closing out
+# the attribution that precedes it.
+_OPENING_PUNCT_RUN = "[" + re.escape("".join(sorted(_OPENING_PUNCT_CHARS))) + "]{1,2}"
+_SEG_BOUNDARY_DUP_MARK_RE = re.compile(
+    rf"(?P<mark>{_OPENING_PUNCT_RUN})</seg>(?P<opentag><seg\b[^>]*>)(?P=mark)"
+)
+
+
+def _dedupe_seg_boundary_marks(xml: str) -> str:
+    return _SEG_BOUNDARY_DUP_MARK_RE.sub(
+        lambda m: m.group("mark") + "</seg>" + m.group("opentag"), xml
+    )
+
+
 # Marker for a stretch whose punctuation was copied from a parallel witness.
 # Carried on `<seg type="…">`, not `@ana`: the CBETA P5 customization drops
 # `att.global.analytic` entirely (no `@ana` on any element), and even in

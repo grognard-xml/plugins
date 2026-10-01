@@ -35,7 +35,23 @@ _BLANK_LINE_RE = re.compile(r"\n\s*\n+")
 # character section). Split further on sentence-ending punctuation so source
 # units are comparable in size to Kanripo's line-level <p> paragraphs — a
 # no-op when the source is already fine-grained.
-_SENTENCE_SPLIT_RE = re.compile(r"(?<=[。！？])")
+#
+# A closing quote/bracket (「...」, 《...》, etc.) routinely sits right after
+# the sentence-final mark that ends the quoted/titled stretch ("...二年。」
+# 郗萌曰...") -- splitting right after 。 alone strands that closing mark as
+# the *next* unit's leading character instead of the end of the one that
+# just closed, and it then has no Han content before it to attach to at
+# all. Each alternative below is its own fixed-width lookbehind (Python's
+# `re` rejects a variable-width one), consuming 0, 1, or 2 stacked closing
+# marks (e.g. a quote ending right at a title's own close too) so the split
+# point lands after all of them, never between the sentence end and the
+# first one.
+_CLOSING_PUNCT = "」』》）〕"
+_SENTENCE_SPLIT_RE = re.compile(
+    rf"(?<=[。！？])(?![{_CLOSING_PUNCT}])"
+    rf"|(?<=[。！？][{_CLOSING_PUNCT}])(?![{_CLOSING_PUNCT}])"
+    rf"|(?<=[。！？][{_CLOSING_PUNCT}][{_CLOSING_PUNCT}])"
+)
 
 # A reference-source paragraph block prefixed with a run of 1 or 2 asterisks
 # is a structural heading, not running text: `*…` for a section, `**…` for a
@@ -308,6 +324,25 @@ class _BigramIndex:
         return result
 
 
+def _coverage_count(key_a: str, key_b: str) -> int:
+    """Count of ``key_a`` characters found, in order, somewhere in ``key_b``.
+
+    The building block both ``_containment_ratio`` and the merge-window
+    growth in ``align_paragraphs`` are built on. Unlike a ratio, this stays a
+    meaningful, strictly-comparable signal even once ``key_b`` grows past
+    ``key_a``'s own length — it can never exceed ``len(key_a)`` no matter how
+    much unrelated extra content ``key_b`` picks up beyond what actually
+    explains ``key_a``, which is exactly what makes it safe to use as a
+    "did growing the merge window actually help" stopping signal: a ratio or
+    raw length alone cannot tell that apart from genuine improvement, since
+    both keep climbing even once growth has stopped covering anything new.
+    """
+    if not key_a or not key_b:
+        return 0
+    matcher = SequenceMatcher(a=key_a, b=key_b, autojunk=False)
+    return sum(block.size for block in matcher.get_matching_blocks())
+
+
 def _containment_ratio(key_a: str, key_b: str) -> float:
     """Fraction of the shorter key's characters found, in order, in the longer one.
 
@@ -320,12 +355,29 @@ def _containment_ratio(key_a: str, key_b: str) -> float:
     denom = min(len(key_a), len(key_b))
     if denom == 0:
         return 0.0
-    matcher = SequenceMatcher(a=key_a, b=key_b, autojunk=False)
-    covered = sum(block.size for block in matcher.get_matching_blocks())
-    return covered / denom
+    return _coverage_count(key_a, key_b) / denom
 
 
-DEFAULT_MAX_MERGE_WINDOW = 3
+# Below this fraction of the ref key's own length, a single candidate's
+# perfect containment score is trusted far less -- it's covering the start
+# of a longer concatenated-citations ref paragraph, not the whole thing, and
+# align_paragraphs tries extending it with neighbors even though its own
+# score already cleared similarity_threshold. 0.9 rather than something
+# looser: a single citation's own sentence-internal padding (an opening
+# "...曰：" before its quote, etc.) can legitimately leave single-candidate
+# coverage a little under 1.0 without another citation actually following.
+_MIN_SINGLE_CANDIDATE_COVERAGE = 0.9
+
+# A single Kanripo <p> can concatenate well over a hundred short citations
+# with no separator at all between them (seen for real: 135 <seg> stamps
+# inside one <p>) -- this needs to be large enough that a long run like that
+# can still be reached, not tuned to a "typical" case. Safe to set
+# generously because align_paragraphs' merge-window growth (see
+# _grow_merge_window) is linear in the window size, not quadratic: it grows
+# the match one source paragraph at a time, backward or forward, only while
+# that still covers more of the ref key than the window already does, so an
+# oversized cap costs nothing when a short run stops growing well before it.
+DEFAULT_MAX_MERGE_WINDOW = 200
 # Tolerance, in source paragraphs, for gaps between matched paragraphs from
 # the same file before build_juan_source_map starts a new excerpt. See that
 # function's docstring for why this bound matters for correctness, not just
@@ -346,6 +398,17 @@ def _best_candidate(
     themselves) — or None if the bigram index found no candidates at all.
     ``unambiguous`` is True only when the tie-break resolved to a single
     winner, which is what gates whether the position pointer advances.
+
+    Deliberately unrestricted across source files, including ones whose
+    number doesn't match the target juan's own: this genre repeats the same
+    sentence verbatim across several juan routinely (boilerplate omens for
+    structurally similar entries), and borrowing *punctuation* for a
+    genuinely identical sentence from wherever it's found is correct and
+    desirable — this only ever decorates the target's own, already-present
+    Han characters with punctuation, never adds new text (see
+    ``parallel_punct.apply_scoped_parallel_punctuation``). Text actually
+    moving between files is a real risk, but only for heading insertion
+    (``_resolve_heading_insertions``), which is gated separately there.
     """
     candidates = index.candidates(key, length_prefilter_ratio)
     if not candidates:
@@ -367,6 +430,68 @@ def _best_candidate(
     return best_score, winners[0], len(winners) == 1
 
 
+_TRAILING_JUAN_DIGITS_RE = re.compile(r"(\d+)\D*$")
+_LEADING_FILE_DIGITS_RE = re.compile(r"^(\d+)")
+_CN_JUAN_LOCATOR_RE = re.compile(r"卷([〇一二三四五六七八九十百千]+)")
+_CN_DIGIT_VALUE = {c: i for i, c in enumerate("〇一二三四五六七八九")}
+_CN_UNIT_VALUE = {"十": 10, "百": 100, "千": 1000}
+# Kanripo's own pb-marker numbering (<pb n="KR..._000-...">) puts front
+# matter before juan 1 as juan 0 -- confirmed directly against this plugin's
+# own test corpus, whose table-of-contents juan is numbered KR..._000.
+_FRONT_MATTER_JUAN_IDS = {"目錄", "目次", "序", "前言", "凡例"}
+
+
+def _cn_numeral_to_int(s: str) -> int | None:
+    """Parse a run of Han numeral characters (e.g. ``"一百二十"`` -> 120).
+    ``None`` if ``s`` is empty or contains anything that isn't a recognized
+    digit/unit character."""
+    if not s or any(ch not in _CN_DIGIT_VALUE and ch not in _CN_UNIT_VALUE for ch in s):
+        return None
+    total = 0
+    section = 0
+    for ch in s:
+        if ch in _CN_DIGIT_VALUE:
+            section = _CN_DIGIT_VALUE[ch]
+        else:
+            total += (section or 1) * _CN_UNIT_VALUE[ch]
+            section = 0
+    return total + section
+
+
+def _numeric_juan_key(juan_id: str) -> int | None:
+    """Best-effort juan number for a ``RefParagraph.juan_id``.
+
+    The Kanripo plugin's own ``meta.juan`` is a human-readable locator
+    (``"卷三"``), not the clean integer its pb markers actually encode
+    (``header["juan"]`` wins over ``pb_meta.juan`` in ``kanripo_tei.py``
+    whenever the source has its own header field) -- so this has to parse
+    that locator, not just look for plain digits. Recognizes, in order:
+    plain trailing digits (``"KR3g0018_003"``, or the bare ``"3"`` a caller
+    might pass directly); a ``"卷<Han numeral>"`` locator (``"卷三"`` ->
+    3, up to ``"卷一百二十"`` -> 120); and a handful of recognized
+    front-matter labels mapped to juan 0 (see ``_FRONT_MATTER_JUAN_IDS``).
+    ``None`` for anything else, which simply leaves heading-anchor matching
+    unrestricted for that juan (see ``_resolve_heading_insertions``), same
+    as if this parsing didn't exist at all.
+    """
+    if juan_id in _FRONT_MATTER_JUAN_IDS:
+        return 0
+    match = _TRAILING_JUAN_DIGITS_RE.search(juan_id)
+    if match:
+        return int(match.group(1))
+    locator = _CN_JUAN_LOCATOR_RE.search(juan_id)
+    if locator:
+        return _cn_numeral_to_int(locator.group(1))
+    return None
+
+
+def _numeric_file_key(file_label: str) -> int | None:
+    """The number a reference-source filename leads with, e.g. the ``3`` in
+    ``"03.txt"`` — ``None`` for a filename with no leading digits."""
+    match = _LEADING_FILE_DIGITS_RE.match(file_label)
+    return int(match.group(1)) if match else None
+
+
 def _merged_source_key(
     by_file: dict[str, list[SourceParagraph]], file: str, start_idx: int, end_idx: int
 ) -> str | None:
@@ -375,6 +500,86 @@ def _merged_source_key(
     if not paras or start_idx < 0 or end_idx >= len(paras):
         return None
     return "".join(paras[i]["key"] for i in range(start_idx, end_idx + 1))
+
+
+# How many consecutive non-improving growth steps _grow_merge_window
+# tolerates before giving up on a direction, rather than stopping at the
+# very first one. A single paragraph along the way whose wording has
+# drifted from this witness (real edition variance between two citations'
+# transmission, not a bug — e.g. one paragraph's ending borrowed from an
+# adjacent citation's wording) adds nothing to coverage on its own, but the
+# *next* paragraph after it usually resumes covering real content; stopping
+# at the first flat step would abandon a long, genuinely-needed run right
+# at that one bad paragraph instead of growing past it.
+_MERGE_GROWTH_PATIENCE = 3
+
+
+def _grow_merge_window(
+    ref_key: str,
+    by_file: dict[str, list[SourceParagraph]],
+    file: str,
+    anchor_idx: int,
+    similarity_threshold: float,
+    max_merge_window: int,
+) -> tuple[int, int, float] | None:
+    """Greedily extend a same-file source-paragraph window around
+    ``anchor_idx``, one paragraph at a time, to cover as much of ``ref_key``
+    as a run of this file's consecutive paragraphs actually explains.
+
+    Linear in the window size, not quadratic: at each step, tries adding one
+    more paragraph on whichever side — backward or forward — and keeps
+    growing on whichever side covers more of ``ref_key`` (see
+    ``_coverage_count``'s docstring for why this, not a ratio or raw length,
+    is the signal that can actually tell "still finding more of ref_key"
+    apart from "just adding unrelated bulk"). Tolerates up to
+    ``_MERGE_GROWTH_PATIENCE`` consecutive non-improving steps before giving
+    up a direction (see that constant), reverting to the best window
+    actually found rather than wherever patience happened to run out. This
+    is what makes a generous ``max_merge_window`` cheap: a run that stops
+    covering more of ref_key stops growing there (plus a short, bounded
+    patience probe), regardless of how high the cap is, and a run that
+    genuinely needs a hundred-plus short citations (seen for real in this
+    corpus) can still reach that without an O(window²) search.
+
+    Returns ``(start_idx, end_idx, score)`` for the best window found, or
+    ``None`` if even the full window never reaches ``similarity_threshold``.
+    """
+    start = end = anchor_idx
+    best_key = _merged_source_key(by_file, file, start, end) or ""
+    best_coverage = _coverage_count(ref_key, best_key)
+    best_start, best_end = start, end
+
+    stall = 0
+    while (end - start + 1) < max_merge_window and stall <= _MERGE_GROWTH_PATIENCE:
+        back_key = _merged_source_key(by_file, file, start - 1, end)
+        back_coverage = _coverage_count(ref_key, back_key) if back_key is not None else -1
+        fwd_key = _merged_source_key(by_file, file, start, end + 1)
+        fwd_coverage = _coverage_count(ref_key, fwd_key) if fwd_key is not None else -1
+
+        if back_coverage < 0 and fwd_coverage < 0:
+            break  # both directions exhausted this file's paragraphs
+
+        if fwd_coverage >= back_coverage:
+            end += 1
+            current_coverage = fwd_coverage
+        else:
+            start -= 1
+            current_coverage = back_coverage
+
+        if current_coverage > best_coverage:
+            best_coverage = current_coverage
+            best_start, best_end = start, end
+            stall = 0
+        else:
+            stall += 1
+
+    start, end = best_start, best_end
+    best_key = _merged_source_key(by_file, file, start, end) or ""
+
+    score = _containment_ratio(ref_key, best_key)
+    if score < similarity_threshold:
+        return None
+    return start, end, score
 
 
 def align_paragraphs(
@@ -389,23 +594,39 @@ def align_paragraphs(
 
     Kanripo ``<p>`` breaks are page-line based and routinely straddle two
     reference-source sentence/quotation-unit boundaries — a single ref
-    paragraph can be "end of sentence A" + "start of sentence B". No single
-    source paragraph can fully contain that, capping its best single-candidate
-    score short of the threshold even when the content is genuinely correct.
+    paragraph can be "end of sentence A" + "start of sentence B", or even
+    several whole citations concatenated with no separator at all between
+    them (no ideographic space, Kanripo's own citation-boundary convention,
+    always guaranteed). No single source paragraph can fully contain that,
+    capping its best single-candidate score short of the threshold even when
+    the content is genuinely correct.
 
-    When a ref paragraph's single best candidate falls short, this retries
-    against a merged window of that candidate plus its immediate neighbors
-    *in the same source file* (extending backward, forward, or both, up to
-    ``max_merge_window`` source paragraphs) before giving up — this targets
-    the boundary-straddling case directly instead of just lowering the
-    threshold (which would admit false matches from this genre's formulaic,
-    repeated phrasing).
+    When a ref paragraph's single best candidate falls short — or scores a
+    perfect containment but only accounts for a small fraction of the ref
+    key's own length (the concatenated-citations case: the first citation's
+    source paragraph is perfectly, wholly contained in the combined ref key,
+    which says nothing about whether anything of the ref key remains
+    uncovered after it) — this retries against a merged window of that
+    candidate plus its immediate neighbors *in the same source file*
+    (extending backward, forward, or both, up to ``max_merge_window`` source
+    paragraphs) before giving up — this targets the boundary-straddling case
+    directly instead of just lowering the threshold (which would admit false
+    matches from this genre's formulaic, repeated phrasing).
 
     Ties/near-ties are broken by a monotonic per-file position pointer: among
     candidates within ``similarity_threshold`` of the best score, prefer the one
     at or after that file's last confirmed match, closest to it. The pointer only
     advances on confident (non-ambiguous) matches, so one bad match can't derail
     everything downstream.
+
+    Deliberately pools every reference file against every juan with no
+    file-to-juan restriction, including this genre's routine case of the
+    same boilerplate sentence appearing verbatim across several juan — see
+    ``_best_candidate``'s docstring for why that's fine (punctuation only,
+    never new text). The real risk of a false cross-juan match — a source
+    file's own heading landing on the wrong juan — is gated in
+    ``_resolve_heading_insertions`` instead, which is the only place text
+    actually moves between files.
     """
     by_file: dict[str, list[SourceParagraph]] = {}
     for src in source_paragraphs:
@@ -435,28 +656,31 @@ def align_paragraphs(
         score, chosen, unambiguous = anchor
         start_idx = end_idx = chosen["para_idx"]
         match_type = "exact" if ref["key"] == chosen["key"] else "fuzzy"
+        # A perfect containment score only says chosen["key"] is wholly found
+        # in ref["key"] in order -- nothing about whether ref["key"] has more
+        # content *after* it that chosen alone doesn't cover (the
+        # concatenated-citations case). Worth trying to extend whenever the
+        # single candidate accounts for well under all of the ref key's own
+        # length, regardless of its score.
+        low_coverage = len(chosen["key"]) < len(ref["key"]) * _MIN_SINGLE_CANDIDATE_COVERAGE
 
-        if score < similarity_threshold:
-            # Try extending the anchor with its immediate same-file neighbors:
-            # forward, backward, then both, growing up to max_merge_window.
-            best_extended: tuple[float, int, int] | None = None
-            for total in range(2, max_merge_window + 1):
-                for extra_before in range(0, total):
-                    extra_after = total - 1 - extra_before
-                    s = chosen["para_idx"] - extra_before
-                    e = chosen["para_idx"] + extra_after
-                    merged_key = _merged_source_key(by_file, chosen["file"], s, e)
-                    if merged_key is None:
-                        continue
-                    merged_score = _containment_ratio(ref["key"], merged_key)
-                    if merged_score >= similarity_threshold and (
-                        best_extended is None or merged_score > best_extended[0]
-                    ):
-                        best_extended = (merged_score, s, e)
-                if best_extended is not None:
-                    break
-            if best_extended is not None:
-                score, start_idx, end_idx = best_extended
+        if score < similarity_threshold or low_coverage:
+            grown = _grow_merge_window(
+                ref["key"],
+                by_file,
+                chosen["file"],
+                chosen["para_idx"],
+                similarity_threshold,
+                max_merge_window,
+            )
+            if grown is not None and grown[1] > grown[0]:
+                # Genuine growth past the single anchor; a (start, end) with
+                # no growth at all and score already below threshold would
+                # make _grow_merge_window's own containment check (same
+                # formula as the anchor's own score) return None too, so
+                # there's no case here where growth "succeeded" without
+                # actually widening the window.
+                start_idx, end_idx, score = grown
                 match_type = "merged"
 
         if score < similarity_threshold:
@@ -671,15 +895,37 @@ def _resolve_heading_insertions(
     paragraph landed at is where the heading goes, right before it. A
     trailing heading with nothing matched after it in its file is dropped —
     there's no target position to anchor it to.
+
+    A heading is the one place in this pipeline where real text — not just
+    punctuation — moves from a reference file into the target: it's inserted
+    verbatim as new ``<head>`` content, not decorated onto characters already
+    in the target the way ordinary punctuation transfer is (see
+    ``align_paragraphs``, deliberately unrestricted). ``align_paragraphs``
+    itself may have matched one of this file's *ordinary* paragraphs into a
+    differently-numbered juan — fine for that paragraph's own punctuation,
+    since the target's text there is unchanged either way, but not a safe
+    basis for anchoring this file's *heading* there too: that would inject
+    one juan's title into another's. So a match only counts as a heading
+    anchor when the source file's own number corresponds to this juan's
+    (same convention as the module docstring; unrestricted when either side
+    has no parseable number, same as today for non-numeric filenames).
     """
     if not ref_paragraphs:
         return []
     juan_id = ref_paragraphs[0]["juan_id"]
+    juan_numeric_key = _numeric_juan_key(juan_id)
     ref_by_key = {(r["juan_id"], r["para_idx"]): r for r in ref_paragraphs}
 
     matched_by_source: dict[tuple[str, int], int] = {}
     for m in matches:
         if m["match_type"] == "unmatched" or m["ref_juan_id"] != juan_id:
+            continue
+        file_numeric_key = _numeric_file_key(m["source_file"])
+        if (
+            juan_numeric_key is not None
+            and file_numeric_key is not None
+            and file_numeric_key != juan_numeric_key
+        ):
             continue
         ref = ref_by_key.get((m["ref_juan_id"], m["ref_para_idx"]))
         if ref is None:
@@ -735,6 +981,7 @@ def apply_paragraph_scoped_sources(
         CoverageSpan,
         ParallelPunctResult,
         _coverage_from_intervals,
+        _dedupe_seg_boundary_marks,
         _han_tape,
         apply_scoped_parallel_punctuation,
         insert_heads,
@@ -786,6 +1033,9 @@ def apply_paragraph_scoped_sources(
             end = int(round(float(span["end"]) * total))
             intervals.append((start, end))
             spans.append(span)
+
+    if applied_any:
+        xml = _dedupe_seg_boundary_marks(xml)
 
     # Han positions are stable across the punctuation insertions above (only
     # non-Han marks are ever added), so the head positions resolved from the
