@@ -689,3 +689,36 @@ def test_adjacent_quote_open_is_not_duplicated_across_a_seg_boundary():
     assert "「「" not in result["body_xml"]
     assert "京氏曰：</seg><seg" in result["body_xml"]
     assert "「日出于夕，人君不祥，社稷亡。」" in result["body_xml"]
+
+
+def test_ref_missing_its_first_char_retries_even_when_chosen_source_is_longer():
+    # The chosen source paragraph can be longer than the ref (it also holds
+    # the next citation's tail) while still lacking the ref's first character,
+    # which lives in the previous source paragraph with its "。」". A length
+    # comparison misses that; an in-order coverage count doesn't.
+    body = '<div type="juan"><p>甲乙丙丁三　年戊己庚辛壬癸　又曰子丑寅卯</p></div>'
+    refs = extract_ref_paragraphs("卷一", body)
+    src = extract_source_paragraphs(
+        "01.txt", "《甲乙》曰：「丙丁，三年。」《戊己》曰：「庚辛，壬癸；又曰：子丑寅卯。」"
+    )
+    matches = align_paragraphs(refs, src)
+    result = apply_paragraph_scoped_sources(body, refs, matches, src)
+    assert "年。」《戊己》" in result["body_xml"]
+
+
+def test_tiny_unmatched_orphan_paragraph_is_folded_into_the_preceding_match():
+    # A one-character ref paragraph ("死") is too short to match alone, which
+    # used to strand the "。」" that follows it.
+    body = (
+        '<div type="juan"><p>巫咸曰月與填星同光以其月月蝕且有以徭徙亡者'
+        "京房易傳曰月與太白會宿太子　死　荊州占曰月與太白聚合宿其國</p></div>"
+    )
+    refs = extract_ref_paragraphs("卷一", body)
+    src = extract_source_paragraphs(
+        "01.txt",
+        "巫咸曰：「月與填星同光，以其月月蝕，且有以徭徙亡者。」京房《易傳》曰：「月與太白會宿，太子死。」"
+        "《荊州占》曰：「月與太白聚合，宿其國。」",
+    )
+    matches = align_paragraphs(refs, src)
+    result = apply_paragraph_scoped_sources(body, refs, matches, src)
+    assert "太子死。」" in result["body_xml"]

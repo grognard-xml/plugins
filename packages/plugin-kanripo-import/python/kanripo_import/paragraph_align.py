@@ -368,6 +368,9 @@ def _containment_ratio(key_a: str, key_b: str) -> float:
 # that still covers more of the ref key than the window already does, so an
 # oversized cap costs nothing when a short run stops growing well before it.
 DEFAULT_MAX_MERGE_WINDOW = 200
+# Longest unmatched ref paragraph (in Han characters) that may be folded into
+# the preceding match's scope; see apply_paragraph_scoped_sources.
+_MAX_ORPHAN_HAN = 4
 # Tolerance, in source paragraphs, for gaps between matched paragraphs from
 # the same file before build_juan_source_map starts a new excerpt. See that
 # function's docstring for why this bound matters for correctness, not just
@@ -663,7 +666,11 @@ def align_paragraphs(
         # attempting it costs nothing on a short candidate that was already
         # the correct, final answer (ordinary sentence-initial padding like
         # an opening "...曰：" before a quote).
-        low_coverage = len(chosen["key"]) < len(ref["key"])
+        # Measured as an in-order Han coverage count, not a length
+        # comparison: the chosen source paragraph can be *longer* than the ref
+        # (it also holds the next citation's tail) while still missing the
+        # ref's first or last character.
+        low_coverage = _coverage_count(ref["key"], chosen["key"]) < len(ref["key"])
 
         if score < similarity_threshold or low_coverage:
             grown = _grow_merge_window(
@@ -1005,7 +1012,14 @@ def apply_paragraph_scoped_sources(
     intervals: list[tuple[int, int]] = []
     spans: list[CoverageSpan] = []
 
-    for match in sorted(matches, key=lambda m: m["ref_para_idx"]):
+    ordered_matches = sorted(matches, key=lambda m: m["ref_para_idx"])
+    unmatched_refs = {
+        (m["ref_juan_id"], m["ref_para_idx"])
+        for m in ordered_matches
+        if m["match_type"] == "unmatched"
+    }
+
+    for match in ordered_matches:
         if match["match_type"] == "unmatched":
             continue
         ref = ref_by_key.get((match["ref_juan_id"], match["ref_para_idx"]))
@@ -1019,11 +1033,36 @@ def apply_paragraph_scoped_sources(
         if not texts:
             continue
         parallel_text = " ".join(texts)
-        target_han = tape[ref["han_start"] : ref["han_end"]]
+        han_end = ref["han_end"]
+        # A Kanripo ideographic-space split can strand a character or two
+        # (e.g. the "死" of "...太子死。」") as its own tiny ref paragraph,
+        # too short to match anything alone -- and the sentence-final marks
+        # that follow it ("。」") then belong to nobody. Fold such an
+        # unmatched orphan into the preceding match's scope, but only when
+        # the source text this match already covers actually ends with it.
+        cursor = ref["para_idx"] + 1
+        while True:
+            orphan = ref_by_key.get((ref["juan_id"], cursor))
+            if (
+                orphan is None
+                or (orphan["juan_id"], orphan["para_idx"]) not in unmatched_refs
+                or orphan["han_start"] != han_end
+                or orphan["han_end"] - orphan["han_start"] > _MAX_ORPHAN_HAN
+            ):
+                break
+            extended = tape[ref["han_start"] : orphan["han_end"]]
+            candidate = _trim_source_text_to_target(extended, parallel_text)
+            if not han_only(candidate).endswith(tape[orphan["han_start"] : orphan["han_end"]]):
+                break
+            han_end = orphan["han_end"]
+            parallel_text = candidate
+            unmatched_refs.discard((orphan["juan_id"], orphan["para_idx"]))
+            cursor += 1
+        target_han = tape[ref["han_start"] : han_end]
         parallel_text = _trim_source_text_to_target(target_han, parallel_text)
 
         result = apply_scoped_parallel_punctuation(
-            xml, parallel_text, ref["han_start"], ref["han_end"]
+            xml, parallel_text, ref["han_start"], han_end
         )
         if not result["applied"]:
             continue
