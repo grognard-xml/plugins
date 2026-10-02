@@ -621,3 +621,54 @@ def test_dedupe_seg_boundary_marks_leaves_different_marks_alone():
     # must not be touched.
     xml = f"甲{SEG_OPEN}書《</seg>{SEG_OPEN}「日出于夕</seg>乙"
     assert _dedupe_seg_boundary_marks(xml) == xml
+
+
+def test_find_han_overlap_ignores_stray_matches_far_from_the_aligned_stretch() -> None:
+    """Boilerplate chars that match elsewhere in a long tape must not stretch the span."""
+    import random
+
+    from kanripo_import.parallel_punct import find_han_overlap
+
+    rng = random.Random(7)
+    pool = [chr(c) for c in range(0x4E00, 0x4E00 + 400)]
+    filler = lambda n: "".join(rng.choice(pool) for _ in range(n))  # noqa: E731
+    work = filler(300)
+    boilerplate = "此作品在全世界都屬於公有領域因為作者逝世已經超過百年"
+    tape = filler(400) + work + filler(1200) + boilerplate[:6] + filler(500)
+    # Variant slips inside the work keep blocks short, forcing the fallback path.
+    varied = "".join("X" if i % 17 == 5 else ch for i, ch in enumerate(work))
+    sticker = varied + boilerplate
+    span = find_han_overlap(tape, sticker)
+    assert span is not None
+    start, end = span
+    assert 390 <= start <= 410
+    assert end <= 400 + 300 + 10
+
+
+def test_whole_text_match_does_not_absorb_the_paragraph_after_it() -> None:
+    """The line break after the last matched char must survive (next poem's title)."""
+    body = (
+        '<div type="juan"><p>咨五才之並用寔水德</p><p>之靈長惟岷山之導江</p>'
+        '<p>巫咸山賦<note type="comm">有序</note></p><p>蓋巫咸者寔以鴻術</p></div>'
+    )
+    result = apply_parallel_punctuation(body, "咨五才之並用，寔水德之靈長。惟岷山之導江。")
+    xml = result["body_xml"]
+    assert "導江。</seg></p><p>巫咸山賦" in xml
+    assert "<p>巫咸山賦<note" in xml
+    # ...while the break *inside* the matched text is still reflowed away.
+    assert "寔水德之靈長" in xml and "</p><p>之靈長" not in xml
+
+
+def test_reference_title_matching_a_head_does_not_split_paragraphs_inside_it() -> None:
+    """A reference text opening with its title ("蜜蜂賦") that the file holds as <head>."""
+    body = (
+        '<div type="juan"><div><head>蜜蜂賦</head><p>嗟品物之蠢蠢惟貞蟲之明族</p>'
+        '<p>有叢瑣之細蜂亦策名於羽屬</p></div></div>'
+    )
+    ref = "蜜蜂賦\n\n嗟品物之蠢蠢，惟貞蟲之明族。\n\n有叢瑣之細蜂，亦策名於羽屬。"
+    result = apply_parallel_punctuation(body, ref)
+    xml = result["body_xml"]
+    assert result["applied"] is True
+    assert "<head>" in xml and "</p><p></head>" not in xml
+    assert "<head><seg" in xml and "蜜蜂賦</seg></head>" in xml
+    assert "嗟品物之蠢蠢，惟貞蟲之明族。" in xml

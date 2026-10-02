@@ -66,6 +66,9 @@ TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 SEG_OPEN_RE = re.compile(r'<seg\b[^>]*\b(?:type|ana)="[^"]*\bljb:parallel-punct[^"]*"[^>]*>')
 MIN_BLOCK = 8
 MIN_STICKER_COVER = 0.8
+# Max tape/sticker offset change between neighbouring matching blocks that
+# still counts as the same aligned stretch (variant chars, dropped words).
+MAX_DIAGONAL_DRIFT = 24
 MAX_TAPE_GAP = 20
 SENTENCE_END_PUNCT = frozenset("。！？")
 LOW_OVERLAP_RATIO = 0.30
@@ -225,9 +228,23 @@ def find_han_overlap(tape: str, sticker: str) -> tuple[int, int] | None:
             best = max(blocks, key=lambda block: block.size)
             if best.size / len(sticker) >= MIN_STICKER_COVER:
                 return best.a, best.a + best.size
-        sticker_intervals = [(block.b, block.b + block.size) for block in all_blocks]
+        # Join only blocks that sit on one consistent diagonal. Stray short
+        # matches elsewhere in a long tape (a licence line, boilerplate, a
+        # repeated phrase) otherwise stretch the span across unrelated text.
+        best_cluster: list = []
+        cluster: list = []
+        for block in all_blocks:
+            if cluster:
+                prev = cluster[-1]
+                drift = (block.a - prev.a) - (block.b - prev.b)
+                if abs(drift) > MAX_DIAGONAL_DRIFT:
+                    cluster = []
+            cluster.append(block)
+            if sum(b.size for b in cluster) > sum(b.size for b in best_cluster):
+                best_cluster = list(cluster)
+        sticker_intervals = [(block.b, block.b + block.size) for block in best_cluster]
         if _union_covered(sticker_intervals) / len(sticker) >= MIN_STICKER_COVER:
-            tape_intervals = [(block.a, block.a + block.size) for block in all_blocks]
+            tape_intervals = [(block.a, block.a + block.size) for block in best_cluster]
             return min(item[0] for item in tape_intervals), max(item[1] for item in tape_intervals)
         return None
     exact = sticker.find(tape)
@@ -858,11 +875,21 @@ def _should_skip_line_paragraph_break(
     reflow_start: int,
     reflow_end: int,
     para_after: set[int],
+    keep_end_boundary: bool = False,
 ) -> bool:
     """Drop Kanripo ``</p><p>`` wraps inside a reflow zone unless parallel marks a break."""
     if atom != "</p>":
         return False
-    if han_seen < reflow_start or han_seen >= reflow_end:
+    if han_seen < reflow_start:
+        return False
+    # `han_seen` is the index of the last Han char already emitted. The break
+    # right after the last matched char (han_seen == reflow_end - 1) normally
+    # goes too, so two adjacent per-paragraph matches rejoin into one citation.
+    # For a whole-text (single tape) match it is the end of the matched text:
+    # the next paragraph (e.g. the following poem's title) is not part of it
+    # and must not be absorbed.
+    last_inside = reflow_end - 1 if keep_end_boundary else reflow_end
+    if han_seen >= last_inside:
         return False
     if han_seen in para_after:
         return False
@@ -1007,7 +1034,13 @@ def _apply_han_jobs(
         if atom_index <= skip_until:
             continue
         if _should_skip_line_paragraph_break(
-            atom, atoms, atom_index, han_seen, reflow_start, reflow_end, para_after
+            atom,
+            atoms,
+            atom_index,
+            han_seen,
+            reflow_start,
+            reflow_end,
+            para_after,
         ):
             p_open = _paragraph_open_index(atoms, atom_index)
             if p_open is not None:
@@ -1311,6 +1344,7 @@ def _apply_parallel_at_range(
     tape_end: int,
     *,
     segmented: bool = False,
+    keep_end_boundary: bool = False,
 ) -> tuple[str, tuple[int, int] | None, str]:
     """Copy ``match_text`` punctuation onto ``body_xml`` over Han range ``[tape_start, tape_end)``.
 
@@ -1338,10 +1372,11 @@ def _apply_parallel_at_range(
     reflow_start = tape_start
     reflow_end = tape_end
     comm_note_depth = 0
+    head_depth = 0
 
     def close_stamp_at_boundary(atom: str) -> bool:
         return (
-            atom in ("</p>", "</note>")
+            atom in ("</p>", "</head>", "</note>")
             or NOTE_OPEN_COMM_RE.fullmatch(atom) is not None
         )
 
@@ -1349,7 +1384,14 @@ def _apply_parallel_at_range(
         if atom_index <= skip_until:
             continue
         if _should_skip_line_paragraph_break(
-            atom, atoms, atom_index, han_seen, reflow_start, reflow_end, para_after
+            atom,
+            atoms,
+            atom_index,
+            han_seen,
+            reflow_start,
+            reflow_end,
+            para_after,
+            keep_end_boundary,
         ):
             p_open = _paragraph_open_index(atoms, atom_index)
             if p_open is not None:
@@ -1365,6 +1407,11 @@ def _apply_parallel_at_range(
             elif atom == "</note>" and comm_note_depth > 0:
                 comm_note_depth -= 1
         in_comm_note = comm_note_depth > 0
+
+        if atom.startswith("<head") and not atom.startswith("<header"):
+            head_depth += 1
+        elif atom == "</head>" and head_depth > 0:
+            head_depth -= 1
 
         is_han = (not _is_markup(atom)) and HAN_RE.fullmatch(atom)
         stamp_depth, other_seg_depth = _stamp_depth_delta(atom, stamp_depth, other_seg_depth)
@@ -1389,6 +1436,7 @@ def _apply_parallel_at_range(
                 out.append(extra)
             if (
                 han_seen in para_after
+                and head_depth == 0  # a `</p><p>` inside <head> is not well-formed
                 and not in_comm_note
                 and not _comm_note_follows(atoms, atom_index)
             ):
@@ -1471,17 +1519,33 @@ def apply_scoped_parallel_punctuation(
     return {"body_xml": final_xml, "coverage": coverage, "applied": True}
 
 
+def _fold_han_variants(text: str) -> str:
+    """Length-preserving variant fold for *comparison only* (never for output)."""
+    from kanripo_import.normalize_tables import Normalizer, hard_replacements_table
+
+    folded = Normalizer.from_package_data().normalize_text(text)
+    table = hard_replacements_table()
+    return "".join(
+        table[ch] if ch in table and len(table[ch]) == 1 else ch for ch in folded
+    )
+
+
 def _apply_one(body_xml: str, parallel_text: str) -> tuple[str, tuple[int, int] | None, str]:
     atoms = _iter_xml_atoms(body_xml)
     tape, _ = _han_tape(atoms)
     match_text = _normalize_parallel_match_text(parallel_text)
     sticker = han_only(match_text)
-    overlap = find_han_overlap_flexible(tape, sticker)
+    # Locate on a variant-folded comparison key (於/于, 兹/茲, 濳/潛 …). The fold
+    # is strictly 1:1, so indices into the folded strings are indices into the
+    # real tape/sticker, which everything after this point still uses.
+    overlap = find_han_overlap_flexible(_fold_han_variants(tape), _fold_han_variants(sticker))
     if overlap is None:
         return body_xml, None, ""
 
     tape_start, tape_end = overlap
-    return _apply_parallel_at_range(body_xml, match_text, sticker, tape, tape_start, tape_end)
+    return _apply_parallel_at_range(
+        body_xml, match_text, sticker, tape, tape_start, tape_end, keep_end_boundary=True
+    )
 
 
 def strip_inline_commentary(parallel_text: str) -> str:

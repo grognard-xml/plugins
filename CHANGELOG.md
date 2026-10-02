@@ -12,6 +12,22 @@ Punctuation transfer from reference sources is substantially more accurate; the 
 - Opening brackets lost at the edge of a trimmed excerpt are restored.
 - Reference files can mark chapter, section and subsection headings with a leading `*` or `**`, which become properly nested `<div><head>` structures.
 
+### Parallel alignment: stray matches no longer stretch the matched span
+
+- `find_han_overlap` joined every matching block between a short reference text and a long juan, so a few stray characters elsewhere in the juan (for example Wikisource licence boilerplate that matched unrelated text) stretched the matched span across thousands of unrelated characters (2,742 instead of the real 311) and applied punctuation there. Blocks are now joined only when they sit on one consistent diagonal (`MAX_DIAGONAL_DRIFT`), so the span stays on the real aligned stretch. Regression test added.
+
+### Punctuation transfer: the paragraph after the matched text was pulled into it
+
+- When a whole reference text (a Wikisource poem, say) matched part of a juan, the Kanripo line breaks *inside* the matched text were reflowed into one paragraph, but so was the break right after its last character, so the next paragraph (the following poem's title, `巫咸山賦<note>有序</note>`) ended up inside the stamped paragraph, as if it belonged at its end. That boundary break is now kept for single-tape (whole-text) matches. Per-paragraph matching still drops it on purpose, since there it is what rejoins one citation that Kanripo split across two `<p>`s. Regression test added.
+
+### Parallel alignment: variant characters no longer count against the match
+
+- Locating a reference text in a juan now compares on a length-preserving variant fold (the DPM variant table plus the 1:1 entries of the hard-replacements table), so 於/于, 兹/茲, 棋/棊, 濳/潛 and similar equivalents no longer count as mismatches against the 80% coverage threshold. The fold is for comparison only: indices are unchanged and the Kanripo text itself is never altered.
+
+### Punctuation transfer: reference title inside a `<head>` made the whole transfer fail silently
+
+- A reference text that opens with its own title (Wikisource pages do: `蜜蜂賦`, then the poem) matched the `<head>` of the same name in the file, and the paragraph-break step then emitted `</p><p>` *inside* the `<head>` (`<head><seg>蜜蜂賦</seg></p><p></head>`). The result was not well-formed, so the transfer failed closed and reported "no match" for a text that did align. Paragraph breaks are no longer inserted inside a `<head>`, and the stamp is closed at `</head>`. Regression test added.
+
 ### Heading detection for reference-folder sources
 
 - Reference-source `.txt` files (ctext and similar folder-based witnesses) can now mark chapter/section/subsection titles so the punctuation transfer turns them into proper `<head>` elements instead of running them into the surrounding body text. Convention: an un-closed leading asterisk run — `*text` for a section, `**text` for a subsection — reusing and extending the leading-asterisk-depth style already partially in use across the ctext corpus this was built against, rather than inventing a new one. A file's very first paragraph block needs no marker at all: it's always the chapter/juan title, and (checked against the corpus's own 26 already-marked files) the first thing after it is already a section in the large majority of cases, so an unmarked block past index 0 defaults to section rather than chapter.
