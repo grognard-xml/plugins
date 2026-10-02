@@ -2,6 +2,16 @@
 
 ## plugin-kanripo-import
 
+### 0.1.2
+
+Punctuation transfer from reference sources is substantially more accurate; the detailed write-ups of each fix follow below. In short:
+
+- Opening brackets and quotation marks (`「『《（〔`) now attach to the character that follows them, not the one before, so they no longer land on the wrong side of a comment note, a `<seg>` boundary or a page break.
+- Reference paragraphs made of many concatenated citations are matched in full instead of stopping after the first.
+- Closing quotes are no longer stranded when Kanripo's ideographic-space split falls a character or two away from the reference source's sentence boundary, and a title's stray first character is reunited with its `《…》`.
+- Opening brackets lost at the edge of a trimmed excerpt are restored.
+- Reference files can mark chapter, section and subsection headings with a leading `*` or `**`, which become properly nested `<div><head>` structures.
+
 ### Heading detection for reference-folder sources
 
 - Reference-source `.txt` files (ctext and similar folder-based witnesses) can now mark chapter/section/subsection titles so the punctuation transfer turns them into proper `<head>` elements instead of running them into the surrounding body text. Convention: an un-closed leading asterisk run — `*text` for a section, `**text` for a subsection — reusing and extending the leading-asterisk-depth style already partially in use across the ctext corpus this was built against, rather than inventing a new one. A file's very first paragraph block needs no marker at all: it's always the chapter/juan title, and (checked against the corpus's own 26 already-marked files) the first thing after it is already a section in the large majority of cases, so an unmarked block past index 0 defaults to section rather than chapter.
