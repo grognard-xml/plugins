@@ -1033,7 +1033,29 @@ def apply_paragraph_scoped_sources(
         if not texts:
             continue
         parallel_text = " ".join(texts)
+        han_start = ref["han_start"]
         han_end = ref["han_end"]
+        # Mirror case: the orphan is the *first* character(s) of this
+        # citation (a title's "洪" left at the end of the previous <p>), so
+        # it belongs to the source paragraph this match already covers.
+        back = ref["para_idx"] - 1
+        while True:
+            orphan = ref_by_key.get((ref["juan_id"], back))
+            if (
+                orphan is None
+                or (orphan["juan_id"], orphan["para_idx"]) not in unmatched_refs
+                or orphan["han_end"] != han_start
+                or orphan["han_end"] - orphan["han_start"] > _MAX_ORPHAN_HAN
+            ):
+                break
+            extended = tape[orphan["han_start"] : han_end]
+            candidate = _trim_source_text_to_target(extended, parallel_text)
+            if not han_only(candidate).startswith(tape[orphan["han_start"] : orphan["han_end"]]):
+                break
+            han_start = orphan["han_start"]
+            parallel_text = candidate
+            unmatched_refs.discard((orphan["juan_id"], orphan["para_idx"]))
+            back -= 1
         # A Kanripo ideographic-space split can strand a character or two
         # (e.g. the "死" of "...太子死。」") as its own tiny ref paragraph,
         # too short to match anything alone -- and the sentence-final marks
@@ -1050,7 +1072,7 @@ def apply_paragraph_scoped_sources(
                 or orphan["han_end"] - orphan["han_start"] > _MAX_ORPHAN_HAN
             ):
                 break
-            extended = tape[ref["han_start"] : orphan["han_end"]]
+            extended = tape[han_start : orphan["han_end"]]
             candidate = _trim_source_text_to_target(extended, parallel_text)
             if not han_only(candidate).endswith(tape[orphan["han_start"] : orphan["han_end"]]):
                 break
@@ -1058,12 +1080,10 @@ def apply_paragraph_scoped_sources(
             parallel_text = candidate
             unmatched_refs.discard((orphan["juan_id"], orphan["para_idx"]))
             cursor += 1
-        target_han = tape[ref["han_start"] : han_end]
+        target_han = tape[han_start:han_end]
         parallel_text = _trim_source_text_to_target(target_han, parallel_text)
 
-        result = apply_scoped_parallel_punctuation(
-            xml, parallel_text, ref["han_start"], han_end
-        )
+        result = apply_scoped_parallel_punctuation(xml, parallel_text, han_start, han_end)
         if not result["applied"]:
             continue
         xml = result["body_xml"]

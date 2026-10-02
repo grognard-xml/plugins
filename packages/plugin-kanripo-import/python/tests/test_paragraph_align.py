@@ -722,3 +722,19 @@ def test_tiny_unmatched_orphan_paragraph_is_folded_into_the_preceding_match():
     matches = align_paragraphs(refs, src)
     result = apply_paragraph_scoped_sources(body, refs, matches, src)
     assert "太子死。」" in result["body_xml"]
+
+
+def test_tiny_orphan_before_a_match_is_claimed_by_the_following_citation():
+    # A title's first character ("洪") stranded as its own ref paragraph at
+    # the end of the previous <p> belongs to the *next* citation's source.
+    body = (
+        '<div type="juan"><p>甲乙丙丁戊己　洪</p><p>範傳曰庚辛壬癸子丑寅卯　孝</p>'
+        "<p>經圖曰辰巳午未申酉</p></div>"
+    )
+    refs = extract_ref_paragraphs("卷一", body)
+    src = extract_source_paragraphs(
+        "01.txt", "甲乙丙丁戊己。」《洪範傳》曰：「庚辛壬癸，子丑寅卯。」《孝經圖》曰：「辰巳午未申酉。」"
+    )
+    matches = align_paragraphs(refs, src)
+    xml = apply_paragraph_scoped_sources(body, refs, matches, src)["body_xml"]
+    assert "《洪" in xml and "《孝" in xml
