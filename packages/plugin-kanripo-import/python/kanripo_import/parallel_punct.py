@@ -1469,6 +1469,7 @@ def apply_scoped_parallel_punctuation(
     tape_end: int,
     *,
     min_map_ratio: float = MIN_AI_HAN_MAP_RATIO,
+    keep_end_boundary: bool = False,
 ) -> ParallelPunctResult:
     """Apply parallel punct on a known Han range (AI segments — skip global overlap search).
 
@@ -1497,8 +1498,18 @@ def apply_scoped_parallel_punctuation(
     mapping = _sticker_to_tape_map(sticker, tape, tape_start, tape_end)
     if len(mapping) / len(sticker) < min_map_ratio:
         return empty
+    # keep_end_boundary=True (AI selections): the </p> right after the scoped range ends a
+    # paragraph that is not part of this match and must not be absorbed. Default False lets
+    # adjacent per-paragraph matches (paragraph-aligned import) rejoin into one citation.
     final_xml, overlap, preview = _apply_parallel_at_range(
-        body_xml, match_text, sticker, tape, tape_start, tape_end, segmented=True
+        body_xml,
+        match_text,
+        sticker,
+        tape,
+        tape_start,
+        tape_end,
+        segmented=True,
+        keep_end_boundary=keep_end_boundary,
     )
     if overlap is None:
         return empty

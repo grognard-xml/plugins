@@ -87,17 +87,45 @@ def expand_gaiji_inline_tags(text: str) -> str:
     return _GAIJI_INLINE_TAG_RE.sub(lambda match: gaiji_graphic_xml(match.group(1)), text)
 
 
+_KR_ID_RE = re.compile(r"KR\d{4}")
+
+
+def clean_gaiji_overrides(raw: object) -> dict[str, str]:
+    """Keep only well-formed ``KRnnnn -> character`` entries from a project override table.
+
+    A value must be exactly one Unicode code point (or an IDS ``[...]`` string); anything else
+    is dropped so a hand-edited file can't inject markup into the document.
+    """
+    if not isinstance(raw, dict):
+        return {}
+    cleaned: dict[str, str] = {}
+    for key, value in raw.items():
+        if not isinstance(key, str) or not _KR_ID_RE.fullmatch(key) or not isinstance(value, str):
+            continue
+        value = value.strip()
+        if len(value) == 1 or (value.startswith("[") and value.endswith("]")):
+            if not any(ch in value for ch in "<>&"):
+                cleaned[key] = value
+    return cleaned
+
+
 def resolve_kanripo_refs(
     text: str,
     table: dict[str, str | None] | None = None,
+    overrides: dict[str, str] | None = None,
 ) -> tuple[str, list[str]]:
-    """Replace ``&KRnnnn;`` references; return text and KR ids that need PNG assets."""
+    """Replace ``&KRnnnn;`` references; return text and KR ids that need PNG assets.
+
+    ``overrides`` (the project's own ``KRnnnn -> character`` table) wins over the bundled
+    KR-Gaiji charlist, which is blank for most entries and lossy (normalised) for others.
+    """
     lookup = default_table() if table is None else table
+    overrides = overrides or {}
     image_ids: list[str] = []
 
     def _replace(match: re.Match[str]) -> str:
         kr_id = f"KR{match.group(1)}"
-        replacement = lookup.get(kr_id)
+        replacement = overrides.get(kr_id) or lookup.get(kr_id)
         if replacement:
             return replacement
         if kr_id not in image_ids:

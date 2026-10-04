@@ -249,6 +249,20 @@ def test_scoped_parallel_on_known_range():
     assert "，" in result["body_xml"]
 
 
+def test_scoped_parallel_does_not_merge_with_following_paragraph():
+    from kanripo_import.parallel_punct import apply_scoped_parallel_punctuation
+
+    body = '<div type="juan"><p>甲乙丙丁</p><p>戊己庚辛</p></div>'
+    # A selection of the first paragraph clips to Han range [0, 4).
+    result = apply_scoped_parallel_punctuation(
+        body, "甲乙，丙丁。", 0, 4, keep_end_boundary=True
+    )
+    assert result["applied"] is True
+    out = result["body_xml"]
+    assert out.count("<p>") == 2
+    assert "</p><p>戊己庚辛</p>" in out
+
+
 def test_scoped_parallel_tolerates_variant_normalization():
     from kanripo_import.parallel_punct import apply_scoped_parallel_punctuation
 

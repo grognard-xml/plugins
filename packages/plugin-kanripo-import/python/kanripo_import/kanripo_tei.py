@@ -8,7 +8,12 @@ from typing import Literal
 
 from kanripo_import.commentary import extract_commentary_from_text
 from kanripo_import.edition import resolve_edition
-from kanripo_import.kanripo_gaiji import copy_gaiji_assets, gaiji_graphic_xml, resolve_kanripo_refs
+from kanripo_import.kanripo_gaiji import (
+    clean_gaiji_overrides,
+    copy_gaiji_assets,
+    gaiji_graphic_xml,
+    resolve_kanripo_refs,
+)
 from kanripo_import.kanripo_io import extract_kanripo_metadata, load_kanripo_text
 from kanripo_import.metadata_xml import build_metadata_xml, work_metadata_to_dict
 from kanripo_import.normalize_tables import Normalizer
@@ -212,6 +217,7 @@ def convert_kanripo_txt(
     *,
     normalize: NormalizeMode = "off",
     gaiji_dest_dir: Path | None = None,
+    gaiji_overrides: dict[str, str] | None = None,
 ) -> dict:
     path = Path(path)
     raw = path.read_text(encoding="utf-8", errors="replace")
@@ -222,7 +228,9 @@ def convert_kanripo_txt(
     juan = header["juan"] or (str(pb_meta.juan) if pb_meta else "")
     title = header["title"] or kanripo_id or path.stem
 
-    body, gaiji_ids = resolve_kanripo_refs(load_kanripo_text(path))
+    body, gaiji_ids = resolve_kanripo_refs(
+        load_kanripo_text(path), overrides=clean_gaiji_overrides(gaiji_overrides)
+    )
     body = _apply_normalize_outside_pb(body, normalize)
     body = merge_continued_commentary(body)
     extract_commentary_from_text(body)

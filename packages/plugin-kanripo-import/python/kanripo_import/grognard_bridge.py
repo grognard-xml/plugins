@@ -179,6 +179,7 @@ def cli_main() -> None:
         path,
         normalize=normalize,
         gaiji_dest_dir=Path(gaiji_dest) if gaiji_dest else None,
+        gaiji_overrides=payload.get("gaiji_overrides"),
     )
     json.dump(result, sys.stdout, ensure_ascii=False)
     sys.stdout.write("\n")

@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from kanripo_import.kanripo_gaiji import (
+    clean_gaiji_overrides,
     default_table,
     gaiji_graphic_xml,
     load_gaiji_table,
@@ -72,3 +73,31 @@ def test_commentary_slash_join_removed() -> None:
     assert "過其本性也以喻學則才" in div
     assert "也/以" not in div
     assert '<note type="comm">' in div
+
+
+def test_project_override_resolves_image_only_gaiji() -> None:
+    table = {"KR2112": None}
+    text, image_ids = resolve_kanripo_refs("旋龜&KR2112;魚", table, {"KR2112": "𪁺"})
+    assert text == "旋龜𪁺魚"
+    assert image_ids == []
+
+
+def test_project_override_beats_charlist_entry() -> None:
+    table = {"KR0002": "若"}
+    text, _ = resolve_kanripo_refs("&KR0002;", table, {"KR0002": "𠁅"})
+    assert text == "𠁅"
+
+
+def test_clean_overrides_drops_malformed_entries() -> None:
+    cleaned = clean_gaiji_overrides(
+        {
+            "KR2112": " 𪁺 ",
+            "KR2113": "兩字",
+            "KR2114": "<g/>",
+            "KR21": "字",
+            "KR2115": 5,
+            "KR2116": "[⿰魚甬]",
+        }
+    )
+    assert cleaned == {"KR2112": "𪁺", "KR2116": "[⿰魚甬]"}
+    assert clean_gaiji_overrides(["not", "a", "dict"]) == {}

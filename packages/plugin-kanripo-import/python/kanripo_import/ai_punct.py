@@ -664,7 +664,9 @@ def apply_ai_parallel_segments(
         han_start = item.get("han_start")
         han_end = item.get("han_end")
         if isinstance(han_start, int) and isinstance(han_end, int):
-            result = apply_scoped_parallel_punctuation(xml, parallel_text, han_start, han_end)
+            result = apply_scoped_parallel_punctuation(
+                xml, parallel_text, han_start, han_end, keep_end_boundary=True
+            )
             if not result.get("applied"):
                 # Scoped range can disagree with model output; retry global infix search.
                 result = apply_parallel_punctuation(xml, parallel_text)
