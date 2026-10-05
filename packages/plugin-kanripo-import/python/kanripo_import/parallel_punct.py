@@ -12,7 +12,10 @@ from difflib import SequenceMatcher
 from typing import TypedDict
 from xml.etree import ElementTree as ET
 
-HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]")
+# Han: Ext A, the main block, CJK compatibility ideographs, and planes 2-3 (Ext B through H). The
+# astral part matters: Kanripo texts use Ext B+ characters directly (e.g. 𪁺 U+2A07A), and a Han
+# test that stops at the BMP drops them from the tape and shifts every index after them.
+HAN_RE = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U000323AF]")
 # Marks copied from a parallel onto the Kanripo body. Keep in sync with
 # ``AI_PUNCT_CHARS`` in ai_punct.py for the shared CJK set (《》· included).
 # Title marks 《》 were missing here and were silently dropped on every transfer.

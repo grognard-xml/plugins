@@ -503,3 +503,25 @@ def test_paragraph_spans_count_notes_and_skip_empty_paragraphs():
         (0, 4, 1),
         (5, 7, 0),
     ]
+
+
+def test_astral_plane_han_counts_as_han_in_segments_and_paragraphs():
+    # 𪁺 (U+2A07A) and 𩿧 (U+29FE7) are Extension B: one Han index each, like any other character.
+    body = '<div type="juan"><p>祝荼草旋龜𪁺𩿧魚</p><p>戊己</p></div>'
+    listed = list_segments(body)
+    seg = listed["segments"][0]
+    assert seg["han"] == "祝荼草旋龜𪁺𩿧魚戊己"
+    assert (seg["han_start"], seg["han_end"]) == (0, 10)
+    assert [(p["han_start"], p["han_end"]) for p in listed["paragraphs"]] == [(0, 8), (8, 10)]
+
+
+def test_scoped_apply_stays_aligned_after_astral_characters():
+    from kanripo_import.parallel_punct import apply_scoped_parallel_punctuation
+
+    body = '<div type="juan"><p>祝荼草旋龜𪁺𩿧魚</p><p>戊己庚辛</p></div>'
+    # Range [8, 12) is the second paragraph; if astral chars were dropped from the tape, it
+    # would start two characters too early (or fail the range check).
+    result = apply_scoped_parallel_punctuation(body, "戊己，庚辛。", 8, 12, keep_end_boundary=True)
+    assert result["applied"] is True
+    assert "戊己，庚辛。" in result["body_xml"]
+    assert "祝荼草旋龜𪁺𩿧魚" in result["body_xml"]
