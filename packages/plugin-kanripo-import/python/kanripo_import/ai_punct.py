@@ -51,10 +51,18 @@ class SegmentInfo(TypedDict):
     has_punct: bool
 
 
+class ParagraphSpan(TypedDict):
+    han_start: int
+    han_end: int
+    han_count: int
+    punct_count: int
+
+
 class SegmentListResult(TypedDict):
     segments: list[SegmentInfo]
     has_any_punct: bool
     body_xml: str
+    paragraphs: list[ParagraphSpan]
 
 
 class RawInsertion(TypedDict, total=False):
@@ -131,6 +139,46 @@ def _segment_context(
     return preceding, following
 
 
+def paragraph_spans(atoms: list[str]) -> list[ParagraphSpan]:
+    """Han range and existing-mark count of every ``<p>``, in the same Han index space as segments.
+
+    Segments span adjacent paragraphs (they break only at commentary notes), so they cannot say
+    *which* paragraph of a selection is punctuated; this can. Inline notes inside a paragraph
+    count towards it, matching the segmented tape. Empty paragraphs are omitted.
+    """
+    spans: list[ParagraphSpan] = []
+    han_seen = 0
+    depth = 0
+    start = 0
+    han_count = 0
+    punct_count = 0
+    for atom in atoms:
+        if _is_markup(atom):
+            if _is_p_open(atom):
+                if depth == 0:
+                    start, han_count, punct_count = han_seen, 0, 0
+                depth += 1
+            elif atom == "</p>" and depth > 0:
+                depth -= 1
+                if depth == 0 and han_count > 0:
+                    spans.append(
+                        {
+                            "han_start": start,
+                            "han_end": han_seen,
+                            "han_count": han_count,
+                            "punct_count": punct_count,
+                        }
+                    )
+            continue
+        if HAN_RE.fullmatch(atom):
+            han_seen += 1
+            if depth:
+                han_count += 1
+        elif depth:
+            punct_count += sum(1 for ch in atom if ch in AI_PUNCT_CHARS)
+    return spans
+
+
 def list_segments(body_xml: str) -> SegmentListResult:
     """Export basetext / commentary segments for TS prompts."""
     merged = merge_split_comm_notes(body_xml)
@@ -159,6 +207,7 @@ def list_segments(body_xml: str) -> SegmentListResult:
         "segments": segments,
         "has_any_punct": has_any,
         "body_xml": merged,
+        "paragraphs": paragraph_spans(atoms),
     }
     return result
 

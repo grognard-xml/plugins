@@ -479,3 +479,27 @@ def test_coverage_from_punctuation_long_segment_with_real_marks_counts_as_covere
     body = f'<div type="juan"><p>{punctuated}</p></div>'
     cov = coverage_from_punctuation(body)
     assert cov["ratio"] > 0.5
+
+
+def test_list_segments_reports_per_paragraph_punctuation():
+    # Adjacent paragraphs form ONE segment, so only the paragraph spans can tell which is punctuated.
+    body = '<div type="juan"><p>甲乙，丙丁。</p><p>戊己庚辛壬癸</p></div>'
+    listed = list_segments(body)
+    assert len(listed["segments"]) == 1
+    assert listed["segments"][0]["has_punct"] is True
+    assert listed["paragraphs"] == [
+        {"han_start": 0, "han_end": 4, "han_count": 4, "punct_count": 2},
+        {"han_start": 4, "han_end": 10, "han_count": 6, "punct_count": 0},
+    ]
+
+
+def test_paragraph_spans_count_notes_and_skip_empty_paragraphs():
+    body = (
+        '<div type="juan"><p><pb n="x"/>戊<note type="comm">己，庚</note>辛</p><p/>'
+        "<head>題</head><p>壬癸</p></div>"
+    )
+    paragraphs = list_segments(body)["paragraphs"]
+    assert [(p["han_start"], p["han_end"], p["punct_count"]) for p in paragraphs] == [
+        (0, 4, 1),
+        (5, 7, 0),
+    ]
