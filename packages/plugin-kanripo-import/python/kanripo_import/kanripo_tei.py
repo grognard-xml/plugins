@@ -170,9 +170,95 @@ def _is_heading_blob(blob: str) -> bool:
     return stripped.startswith("**")
 
 
+# --- Siku quanshu (WYG) title block --------------------------------------------------
+#
+# These editions open every juan with a fixed block that is paratext, not the work's own
+# text, and mark it by indentation (a leading U+3000) rather than the ``**`` the importer
+# otherwise understands:
+#
+#     欽定四庫全書            imprimatur formula      -> <head type="imprimatur">
+#     　山海經卷二            title + juan number     -> <head type="title">
+#     　　　　晉　郭璞　撰    attribution             -> <byline>
+#     　　西山經              the work's own section  -> <head>
+#     ...
+#     　山海經卷二            colophon repeating the title -> <trailer>
+#
+# Left as ``<p>``, the AI punctuation step joins them to the first body sentence.
+
+_IMPRIMATUR = "欽定四庫全書"
+_TITLE_LINE_RE = re.compile(r"^.{1,30}[卷巻][〇零一二三四五六七八九十百廿卅\d]+$")
+_BYLINE_RE = re.compile(r"^.{0,16}[撰著譯注校輯編]$")
+_BLOCK_LINE_MAX = 20
+_INDENT_CHARS = "　"
+
+
+def _compact_line(raw_line: str) -> str:
+    """Line content with page-break tags, pilcrow and every kind of whitespace removed."""
+    text = _PB_TAG_RE.sub("", raw_line).replace("¶", "").replace("巻", "卷")
+    return "".join(ch for ch in text if not ch.isspace())
+
+
+def _is_indented(raw_line: str) -> bool:
+    return _PB_TAG_RE.sub("", raw_line).lstrip(" \t").startswith(_INDENT_CHARS)
+
+
+def _title_block_roles(lines: list[str]) -> dict[int, str]:
+    """Map line index -> role (imprimatur, title, byline, head, trailer) for a WYG title block."""
+    roles: dict[int, str] = {}
+    title = ""
+    block_open = True
+    seen_content = False
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped == "" or _PB_LINE_RE.match(stripped):
+            continue
+        compact = _compact_line(stripped)
+        if not block_open:
+            break
+        if not compact:
+            continue
+        if not seen_content and compact == _IMPRIMATUR:
+            roles[index] = "imprimatur"
+            seen_content = True
+            continue
+        seen_content = True
+        plain = not any(ch in compact for ch in "()[]*")
+        if not (_is_indented(line) and plain and len(compact) <= _BLOCK_LINE_MAX):
+            block_open = False
+            continue
+        if "title" not in roles.values() and _TITLE_LINE_RE.match(compact):
+            roles[index] = "title"
+            title = compact
+        elif "byline" not in roles.values() and _BYLINE_RE.match(compact):
+            roles[index] = "byline"
+        elif "title" in roles.values():
+            roles[index] = "head"
+        else:
+            block_open = False
+    if title:
+        opening_end = max(roles) if roles else -1
+        for index, line in enumerate(lines):
+            if index <= opening_end or index in roles:
+                continue
+            if _is_indented(line) and _compact_line(line) == title:
+                roles[index] = "trailer"
+    return roles
+
+
+_ROLE_TAGS = {
+    "imprimatur": ('<head type="imprimatur">', "</head>"),
+    "title": ('<head type="title">', "</head>"),
+    "byline": ("<byline>", "</byline>"),
+    "head": ("<head>", "</head>"),
+    "trailer": ("<trailer>", "</trailer>"),
+}
+
+
 def body_to_tei_div(body: str) -> str:
     paragraphs: list[str] = []
     current: list[str] = []
+    lines = body.splitlines()
+    roles = _title_block_roles(lines)
 
     def flush_current() -> None:
         if not current:
@@ -187,7 +273,7 @@ def body_to_tei_div(body: str) -> str:
         else:
             paragraphs.append(f"<p>{_inline_to_xml(blob)}</p>")
 
-    for line in body.splitlines():
+    for line_index, line in enumerate(lines):
         stripped = line.strip()
         if stripped == "":
             continue
@@ -197,6 +283,14 @@ def body_to_tei_div(body: str) -> str:
             continue
         ends = stripped.endswith("¶")
         piece = stripped[:-1].rstrip() if ends else stripped
+        role = roles.get(line_index)
+        if role:
+            if current and not all(part.startswith("<pb:") for part in current):
+                flush_current()
+            opening, closing = _ROLE_TAGS[role]
+            paragraphs.append(f"{opening}{_inline_to_xml(''.join(current) + piece)}{closing}")
+            current.clear()
+            continue
         if _is_heading_blob(piece):
             if current and not all(part.startswith("<pb:") for part in current):
                 flush_current()

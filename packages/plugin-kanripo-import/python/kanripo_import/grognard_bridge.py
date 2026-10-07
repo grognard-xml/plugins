@@ -158,6 +158,13 @@ def cli_main() -> None:
         sys.stdout.write("\n")
         return
 
+    if op == "finalize_body":
+        from kanripo_import.finalize import bridge_finalize_body
+
+        json.dump(bridge_finalize_body(payload), sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+
     if op == "punct_coverage":
         from kanripo_import.ai_punct import bridge_punct_coverage
 

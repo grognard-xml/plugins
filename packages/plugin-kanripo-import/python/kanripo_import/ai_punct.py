@@ -250,7 +250,10 @@ def coverage_from_punctuation(body_xml: str) -> Coverage:
     intervals: list[tuple[int, int]] = []
     spans: list[dict[str, object]] = []
     for seg in segments:
-        if not segment_is_adequately_punctuated(seg["han"], seg["has_punct"], seg["text"]):
+        # Headings are paratext that is deliberately left unpunctuated: count them as done.
+        if seg["kind"] != "head" and not segment_is_adequately_punctuated(
+            seg["han"], seg["has_punct"], seg["text"]
+        ):
             continue
         start, end = seg["han_start"], seg["han_end"]
         if end <= start:

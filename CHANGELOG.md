@@ -2,6 +2,21 @@
 
 ## plugin-kanripo-import
 
+### Unreleased
+
+#### Siku quanshu title block: no longer merged into the body
+
+- The Wenyuange (WYG) files open every juan with a fixed block that is paratext, and mark it by indentation (a leading ideographic space), not with the `**` the importer understood. It became ordinary `<p>`s, and the AI punctuation step then collapsed them into the first body paragraph (`欽定四庫全書山海經卷三晉郭璞撰北山經。北山經之首曰…` in one `<seg>`).
+- The importer now recognises the block: `欽定四庫全書` becomes `<head type="imprimatur">`, `山海經卷三` `<head type="title">`, `晉　郭璞　撰` a `<byline>`, the section name (`北山經`) a plain `<head>`, and the repeated closing title a `<trailer>`. A line counts only when it is indented, plain (no notes or brackets) and at most 20 characters, and the block ends at the first line that is not, so a 提要 juan that indents running prose is left alone. 巻 and 卷 are treated as the same character when matching the colophon.
+- `parse_body_segments` emits `head`, `byline` and `trailer` as segments of kind `head`, so Han indices stay in step but they never join a base-text segment and the AI step never targets them. Parallel alignment skips them and the coverage bar counts them as done.
+
+#### Finalize pass: terminal marks on notes, no break before a note, bare headings
+
+- New `finalize_body` bridge op (`finalize.py`), run after the punctuation step. It never calls a model and returns its input unchanged if the result would not be well-formed or would change a Han character.
+- Every `<note type="comm">` ends in 。！？」 or 』. A trailing 、，；： is replaced by 。; anything else, including a closing 》 and a note ending in a gaiji, gets 。 appended (before a trailing `<pb/>`).
+- A comm note that opens a paragraph (with any page breaks around it) moves back to the end of the preceding paragraph, so a paragraph never breaks directly before inline commentary; the break stays where the base text resumes, and a paragraph left empty is dropped. `relocate_leading_comm_notes` used to do this only when the preceding paragraph ended in a sentence mark, which left stranded notes such as `亦珠母蚌類而能生出之` as paragraphs of their own. A preceding paragraph that is pure commentary is left alone.
+- `head`, `byline` and `trailer` lose trailing punctuation.
+
 ### 0.1.2
 
 Punctuation transfer from reference sources is substantially more accurate; the detailed write-ups of each fix follow below. In short:

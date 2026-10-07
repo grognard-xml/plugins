@@ -59,6 +59,10 @@ SEG_OPEN = f'<seg type="{SEG_MARK}">'
 NOTE_RE = re.compile(r"<note\b[^>]*>.*?</note>", re.DOTALL)
 NOTE_OPEN_COMM_RE = re.compile(r'<note\b[^>]*\btype="comm"[^>]*>', re.I)
 NOTE_CLOSE_RE = re.compile(r"</note>")
+# Paratext that is never punctuated and never joins base text: title block, section
+# headings, colophon. Segments for these carry kind "head" so Han indices stay in step.
+HEAD_OPEN_RE = re.compile(r"<(?:head|byline|trailer)\b[^>]*>", re.I)
+HEAD_CLOSE_RE = re.compile(r"</(?:head|byline|trailer)>", re.I)
 SPLIT_COMM_RE = re.compile(r"</note></p><p><note\b[^>]*\btype=\"comm\"[^>]*>", re.I)
 INLINE_COMM_RE = re.compile(r'<span\b[^>]*\bclass="inlinecomment"[^>]*>(.*?)</span>', re.DOTALL | re.I)
 WIKISOURCE_COMM_RE = re.compile(r"〈[^〉]*〉")
@@ -434,7 +438,21 @@ def parse_body_segments(body_xml: str) -> list[BodySegment]:
             )
         indices = []
 
+    in_head = False
     for idx, atom in enumerate(atoms):
+        if not in_comm and not in_head and HEAD_OPEN_RE.fullmatch(atom):
+            flush()
+            kind = "head"
+            in_head = True
+            indices = [idx]
+            continue
+        if in_head:
+            indices.append(idx)
+            if HEAD_CLOSE_RE.fullmatch(atom):
+                flush()
+                in_head = False
+                kind = "text"
+            continue
         if NOTE_OPEN_COMM_RE.fullmatch(atom):
             flush()
             kind = "comm"
@@ -802,42 +820,50 @@ def _comm_note_follows(atoms: list[str], index: int) -> bool:
     return False
 
 
-def _ends_with_sentence_end(prefix: str) -> bool:
-    """Whether the last paragraph in ``prefix`` ends a sentence (or stamped stretch)."""
-    trimmed = prefix.rstrip()
-    if trimmed.endswith("</seg></p>") or trimmed.endswith("</seg>"):
-        return True
-    start = trimmed.rfind("<p>")
-    if start < 0:
-        return False
-    tail = trimmed[start + 3 :]
-    visible = re.sub(r"<[^>]+>", "", tail).strip()
-    return bool(visible) and visible[-1] in SENTENCE_END_PUNCT
+_LEADING_NOTE_RUN_RE = re.compile(
+    r"</p>\s*(<p(?:\s[^>]*)?>)"
+    r"((?:\s*(?:<pb\b[^>]*/>|<note\b[^>]*\btype=\"comm\"[^>]*>.*?</note>))+)",
+    re.DOTALL | re.I,
+)
+_NOTE_ANY_RE = re.compile(r"<note\b.*?</note>", re.DOTALL | re.I)
+
+
+def _paragraph_has_base_text(paragraph_xml: str) -> bool:
+    """True when a ``<p>`` carries Han outside its commentary notes."""
+    without_notes = _NOTE_ANY_RE.sub("", paragraph_xml)
+    return bool(HAN_RE.search(re.sub(r"<[^>]+>", "", without_notes)))
 
 
 def relocate_leading_comm_notes(xml: str) -> str:
-    """Attach comm notes stranded at a ``<p>`` start to the preceding sentence."""
-    pattern = re.compile(
-        r"</p>\s*<p>\s*(<note\b[^>]*\btype=\"comm\"[^>]*>.*?</note>)",
-        re.DOTALL | re.I,
-    )
+    """Never break a paragraph right before inline commentary.
+
+    A comm note (with any page breaks around it) that opens a ``<p>`` glosses the base text
+    before it, so it moves back to the end of the preceding paragraph and the break stays where
+    the base text resumes. A paragraph left empty by the move is dropped. A preceding paragraph
+    that is itself pure commentary is left alone: there the note is not mixed with base text.
+    """
     pos = 0
     while True:
-        match = pattern.search(xml, pos)
+        match = _LEADING_NOTE_RUN_RE.search(xml, pos)
         if match is None:
             return xml
+        run = match.group(2).strip()
         before = xml[: match.start()]
-        if not _ends_with_sentence_end(before):
+        p_open = max(before.rfind("<p>"), before.rfind("<p "))
+        if (
+            not NOTE_OPEN_COMM_RE.search(run)
+            or p_open < 0
+            or not _paragraph_has_base_text(before[p_open:])
+        ):
             pos = match.end()
             continue
-        note = match.group(1)
         after = xml[match.end() :]
-        close_idx = before.rfind("</p>")
-        if close_idx < 0:
-            pos = match.end()
-            continue
-        xml = before[:close_idx] + note + before[close_idx:] + "<p>" + after
-        pos = close_idx + len(note) + 3
+        empty = re.match(r"\s*</p>", after)
+        if empty:
+            xml = before + run + "</p>" + after[empty.end() :]
+        else:
+            xml = before + run + "</p>" + match.group(1) + after
+        pos = len(before) + len(run)
 
 
 def _is_p_open(atom: str) -> bool:
@@ -1146,7 +1172,7 @@ def _align_body_to_reference(
     pairs: list[tuple[int, RefSegment]] = []
     for index, body_seg in enumerate(body_segments):
         sticker = body_seg["han"]
-        if not sticker:
+        if not sticker or body_seg["kind"] == "head":
             continue
         overlap = find_han_overlap_from(ref_han_tape, sticker, ref_cursor)
         if overlap is None:
