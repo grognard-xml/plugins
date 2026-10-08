@@ -2,7 +2,7 @@
 
 ## plugin-kanripo-import
 
-### Unreleased
+### 0.1.3
 
 #### Siku quanshu title block: no longer merged into the body
 
