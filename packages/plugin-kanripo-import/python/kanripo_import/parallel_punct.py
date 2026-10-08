@@ -65,7 +65,16 @@ HEAD_OPEN_RE = re.compile(r"<(?:head|byline|trailer)\b[^>]*>", re.I)
 HEAD_CLOSE_RE = re.compile(r"</(?:head|byline|trailer)>", re.I)
 SPLIT_COMM_RE = re.compile(r"</note></p><p><note\b[^>]*\btype=\"comm\"[^>]*>", re.I)
 INLINE_COMM_RE = re.compile(r'<span\b[^>]*\bclass="inlinecomment"[^>]*>(.*?)</span>', re.DOTALL | re.I)
-WIKISOURCE_COMM_RE = re.compile(r"〈[^〉]*〉")
+# Interlinear commentary in a parallel: Wikisource's 〈…〉, or {{…}} (a text exported with its
+# commentary in double braces, e.g. a 文選 with 李善注). Both are commentary *text* that the body's
+# notes also carry, never base text.
+WIKISOURCE_COMM_RE = re.compile(r"〈[^〉]*〉|\{\{[^{}]*\}\}")
+
+
+def _comm_inner(match: re.Match[str]) -> str:
+    """The text inside a commentary bracket matched by ``WIKISOURCE_COMM_RE``."""
+    raw = match.group(0)
+    return raw[2:-2] if raw.startswith("{{") else raw[1:-1]
 PB_RE = re.compile(r"<pb\b[^>]*/>")
 TAG_RE = re.compile(r"</?[A-Za-z][^>]*>")
 # Accept legacy `ana="…"` too, so coverage can still be rebuilt from files
@@ -531,7 +540,7 @@ def parse_wikisource_comm_segments(parallel_text: str) -> list[RefSegment]:
     """Extract each Wikisource ``〈…〉`` interlinear note as one comm segment."""
     segments: list[RefSegment] = []
     for match in WIKISOURCE_COMM_RE.finditer(parallel_text):
-        inner = match.group(0)[1:-1]
+        inner = _comm_inner(match)
         if inner.strip() or han_only(inner):
             segments.append({"kind": "comm", "text": inner})
     return segments
@@ -595,6 +604,11 @@ def _find_comm_pool_overlap(pool_han: str, sticker: str) -> tuple[int, int] | No
     return None
 
 
+# A note shorter than this is located in the commentary pool by content only when its text occurs
+# exactly once there; otherwise it would take the marks of the first unrelated occurrence.
+COMM_POOL_MIN_HAN = 3
+
+
 def _comm_note_han_jobs(
     body_xml: str,
     parallel_text: str,
@@ -616,6 +630,8 @@ def _comm_note_han_jobs(
         if seg["kind"] != "comm" or not seg["han"]:
             continue
         sticker = seg["han"]
+        if len(sticker) < COMM_POOL_MIN_HAN and pool_han.count(sticker) != 1:
+            continue  # too short to be located by content unless it occurs exactly once
         overlap = _find_comm_pool_overlap(pool_han, sticker)
         if overlap is None:
             continue
@@ -646,7 +662,11 @@ def apply_comm_parallel_punctuation(
             "applied": False,
         }
 
-    xml, intervals, spans = _apply_han_jobs(merged, jobs, reflow_paragraphs=False)
+    # Marks only where their anchoring character itself matched: a mark whose anchor is a gaiji
+    # the other edition writes as a character must not be bridged onto the nearest Han.
+    xml, intervals, spans = _apply_han_jobs(
+        merged, jobs, reflow_paragraphs=False, strict_marks=True
+    )
     for span in spans:
         span["source"] = source_label
     xml = _finalize_parallel_xml(merged, xml)
@@ -1114,6 +1134,7 @@ def _apply_han_jobs(
         reflow_start = reflow_end = -1
     pending_split = False
     break_after_marks = False
+    close_stamp_after_marks = False
     out: list[str] = []
     han_seen = -1
     opened_here = 0
@@ -1152,6 +1173,14 @@ def _apply_han_jobs(
                 skip_until = p_open
             continue
 
+        if close_stamp_after_marks:
+            if opened_here == 0:
+                close_stamp_after_marks = False
+            elif _is_markup(atom) or atom not in PUNCT_CHARS:
+                # the marks that belonged to the stamped text are done: close it before this atom
+                opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
+                close_stamp_after_marks = False
+
         if close_stamp_at_boundary(atom) and opened_here > 0:
             opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
 
@@ -1187,6 +1216,16 @@ def _apply_han_jobs(
         elif atom == "</p>":
             pending_split = False
             break_after_marks = False
+        if (
+            close_stamp_after_marks
+            and not is_han
+            and not _is_markup(atom)
+            and atom in PUNCT_CHARS
+            and not _punct_follows(atoms, atom_index)
+            and not (break_after_marks)
+        ):
+            opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
+            close_stamp_after_marks = False
         if break_after_marks and not is_han and not _is_markup(atom) and atom in PUNCT_CHARS:
             # The anchor already carries marks (e.g. a 。 from an earlier pass): the break goes
             # after the last of them, not between the character and its mark.
@@ -1228,7 +1267,10 @@ def _apply_han_jobs(
                         skip_until, _skip_natural_break_after_split(atoms, atom_index)
                     )
             if opened_here > 0 and not in_stamp(han_seen + 1):
-                opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
+                if keep_existing_marks and _punct_follows(atoms, atom_index):
+                    close_stamp_after_marks = True  # existing marks that follow stay inside
+                else:
+                    opened_here, stamp_depth = _close_stamp_if_open(out, opened_here, stamp_depth)
     while opened_here > 0:
         out.append("</seg>")
         opened_here -= 1
@@ -1807,6 +1849,43 @@ def _clean_parallel_for_alignment(parallel_text: str) -> str:
     return text.replace("（", "").replace("）", "")
 
 
+def _free_pieces(
+    blocks: list[tuple[int, int, int]],
+    covered_flags: bytearray,
+) -> list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]]:
+    """Cut an accepted stretch into the runs of its blocks that lie outside what is stamped.
+
+    Each block is clipped to the unstamped tape; consecutive clipped blocks with no stamped Han
+    between them stay together as one piece.
+    """
+    clipped: list[tuple[int, int, int]] = []
+    for a, b, size in blocks:
+        run: int | None = None
+        for offset in range(size + 1):
+            free = offset < size and not covered_flags[a + offset]
+            if free and run is None:
+                run = offset
+            elif not free and run is not None:
+                clipped.append((a + run, b + run, offset - run))
+                run = None
+    pieces: list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]] = []
+    group: list[tuple[int, int, int]] = []
+
+    def flush() -> None:
+        if group:
+            t0, r0 = group[0][0], group[0][1]
+            t1, r1 = group[-1][0] + group[-1][2], group[-1][1] + group[-1][2]
+            pieces.append((t0, t1, r0, r1, sum(g[2] for g in group), list(group)))
+            group.clear()
+
+    for blk in clipped:
+        if group and any(covered_flags[group[-1][0] + group[-1][2] : blk[0]]):
+            flush()
+        group.append(blk)
+    flush()
+    return pieces
+
+
 def _aligned_stretches(
     tape: str,
     sticker: str,
@@ -1828,23 +1907,18 @@ def _aligned_stretches(
         if hi > lo:
             covered_flags[lo:hi] = b"\x01" * (hi - lo)
 
+    # Blocks are found on the whole tape, stamped parts included: a stretch is vetted as a whole
+    # (an already-stamped note in the middle is still aligned text, and is what keeps the base
+    # text on either side of it connected). Only afterwards is the stamped part left out.
     blocks: list[tuple[int, int, int]] = []
     small: list[tuple[int, int, int]] = []  # 2-Han blocks: too weak to anchor, fine inside a stretch
     matcher = SequenceMatcher(None, folded_tape, folded_sticker, autojunk=False)
     for block in matcher.get_matching_blocks():
         if block.size < ALIGN_MIN_BLOCK:
-            if block.size >= 2 and not any(covered_flags[block.a : block.a + block.size]):
+            if block.size >= 2:
                 small.append((block.a, block.b, block.size))
             continue
-        run_start: int | None = None
-        for offset in range(block.size + 1):
-            free = offset < block.size and not covered_flags[block.a + offset]
-            if free and run_start is None:
-                run_start = offset
-            elif not free and run_start is not None:
-                if offset - run_start >= ALIGN_MIN_BLOCK:
-                    blocks.append((block.a + run_start, block.b + run_start, offset - run_start))
-                run_start = None
+        blocks.append((block.a, block.b, block.size))
 
     stretches: list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]] = []
     current: list[tuple[int, int, int]] = []
@@ -1864,9 +1938,8 @@ def _aligned_stretches(
                 if t_start <= blk[0] and blk[0] + blk[2] <= t_end
                 and r_start <= blk[1] and blk[1] + blk[2] <= r_end
             ]
-            stretches.append(
-                (t_start, t_end, r_start, r_end, matched, sorted([*current, *inside]))
-            )
+            for piece in _free_pieces(sorted([*current, *inside]), covered_flags):
+                stretches.append(piece)
         current.clear()
 
     for a, b, size in blocks:
@@ -1919,6 +1992,9 @@ def _flag_substituted_boundary_chars(
                 flagged.add(t1 - 1 - k)
 
 
+_MARK_AFTER_BRACKET_RE = re.compile(r"(（[^（）]*）)([，。、；：？！]+)")
+
+
 def _commentary_as_parentheses(parallel_text: str) -> str:
     """Express every commentary convention the parallel may use as ``（…）``.
 
@@ -1927,7 +2003,10 @@ def _commentary_as_parentheses(parallel_text: str) -> str:
     removed it to match base text only). It is flagged as commentary the same way ``（…）`` is.
     """
     text = INLINE_COMM_RE.sub(lambda m: "（" + m.group(1) + "）", parallel_text)
-    return WIKISOURCE_COMM_RE.sub(lambda m: "（" + m.group(0)[1:-1] + "）", text)
+    text = WIKISOURCE_COMM_RE.sub(lambda m: "（" + _comm_inner(m) + "）", text)
+    # A mark right after a commentary bracket (``潏{{以出}}，為凋``) punctuates the base text, not the
+    # last character of the commentary: put it in front of the bracket, where the body has it.
+    return _MARK_AFTER_BRACKET_RE.sub(r"\2\1", text)
 
 
 def _paren_han_flags(text: str) -> list[bool]:

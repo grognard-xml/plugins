@@ -17,6 +17,15 @@
 - A comm note that opens a paragraph (with any page breaks around it) moves back to the end of the preceding paragraph, so a paragraph never breaks directly before inline commentary; the break stays where the base text resumes, and a paragraph left empty is dropped. `relocate_leading_comm_notes` used to do this only when the preceding paragraph ended in a sentence mark, which left stranded notes such as `亦珠母蚌類而能生出之` as paragraphs of their own. A preceding paragraph that is pure commentary is left alone.
 - `head`, `byline` and `trailer` lose trailing punctuation.
 
+#### Parallels with `{{…}}` commentary: duplicate marks at the start of a note
+
+- A parallel can mark interlinear commentary with double braces (`昔在帝媯{{古為}}巨唐之代，{{帝媯，謂舜也。…}}天綱…`, a 文選 exported with its 李善注). Only `〈…〉`, `（…）` and ctext spans were known as commentary, so the commentary's own punctuation (`瀾汗，長貌。`) had nowhere to go and was bridged onto the base-text character in front of the note: `洪濤瀾汗，萬里無際。，。<note>`. 216 such runs in one juan of KR4h0002, all at a note start (the same before this session's changes). `{{…}}` is now read as commentary everywhere `〈…〉` is: it is left out of the base-text match, matched to the body's notes, and flagged as commentary in the aligned pass. 216 stray runs → 0.
+- A one-character note was looked up in the pool of all commentary and took the marks of the first place its character occurs (`鬱沏<note>切。，。</note>`). A note shorter than 3 Han is now matched by content only when its text occurs exactly once in the pool; otherwise it is left to the positional match.
+- The commentary pass copied a mark whose anchoring character did not match (a gaiji the other edition writes as a character) onto the nearest Han: marks now go only where their anchor aligned.
+- A mark right after a commentary bracket (`潏{{以出}}，為凋`, `亟進大兵〈…〉，彼必奔走`) punctuates the base text, so it is moved in front of the bracket before aligning. It was attached to the last character of the commentary, giving the note a second copy of the comma.
+- Aligned pass: a stretch is now vetted as a whole, including notes already stamped by the commentary pass, and only then are the stamped parts left out. Left out first, the base text between stamped notes broke into fragments each too short to pass, so punctuated base text stayed unstamped and the coverage bar showed it as grey (99.7% → 90%). A stamp now also encloses the marks that already follow its text.
+- Checked on a 文選 juan with its parallel, 荀子, 後漢書 and 史記 in both source modes, 17 files of 8 Daozang works, and KR1j0004: nothing else moves.
+
 #### Siku title block: title and attribution on one line (穆天子傳)
 
 - Some works print the title and the attribution on one line, separated by a run of ideographic spaces (`　穆天子傳卷一　　　　　　晉　郭璞　註`). The title-block reader expected them on separate lines, so for 穆天子傳 only 欽定四庫全書 became a head: the title, the attribution and `古文` were left as ordinary text and the AI step punctuated them as one sentence with the first line of the work (`穆天子傳卷一。晉郭璞註。古文飲天子蠲…`).

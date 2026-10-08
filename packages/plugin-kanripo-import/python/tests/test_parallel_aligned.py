@@ -409,3 +409,58 @@ def test_a_label_cut_from_its_note_by_a_line_wrap_is_not_absorbed():
     body = body.replace("音義<note", "音義</p>\n<p><note", 2)
     plain = _plain(apply_parallel_aligned(body, parallel)["body_xml"])
     assert "音</note>義" not in plain and "音。</note>義" not in plain
+
+
+# --- {{…}} commentary (a 文選 exported with its 李善注 in double braces) ------------------------
+BRACE_PARALLEL = (
+    "昔在帝媯{{古為}}巨唐之代，{{帝媯，謂舜也。尚書序曰：昔在帝堯。}}天綱浡{{蒲沒}}潏{{以出}}，"
+    "為凋為瘵{{側界反。言水之廣大，為天綱紀。}}洪濤瀾汗，萬里無際。{{瀾汗，長貌。西京賦曰：起洪濤而揚波。}}"
+)
+BRACE_BODY = (
+    '<div type="juan"><p>昔在帝媯<note type="comm">古為</note>臣唐之代<note type="comm">帝媯謂舜也尚書序曰昔在帝堯</note>'
+    '天綱浡<note type="comm">蒲沒</note>潏<note type="comm">以出</note>為凋為瘵'
+    '<note type="comm">側界反言水之廣大為天綱紀</note>洪濤瀾汗萬里無際'
+    '<note type="comm">瀾汗長貌西京賦曰起洪濤而揚波</note></p></div>'
+)
+
+
+def test_double_brace_commentary_is_recognised_so_its_marks_do_not_pile_before_the_note():
+    from kanripo_import.parallel_punct import apply_parallel_punctuation
+
+    plain = _plain(apply_parallel_punctuation(BRACE_BODY, BRACE_PARALLEL)["body_xml"])
+    assert not re.search(r"[，。、；：？！]{2,}", re.sub(r"<[^>]+>", "", plain))
+    assert "洪濤瀾汗，萬里無際。<note" in plain  # the base text keeps its own marks only
+    assert "<note type=\"comm\">瀾汗，長貌。西京賦曰：起洪濤而揚波。</note>" in plain
+    assert "{" not in plain
+
+
+def test_a_one_character_note_that_occurs_many_times_in_the_commentary_takes_no_foreign_marks():
+    from kanripo_import.parallel_punct import apply_parallel_punctuation
+
+    # 切 occurs in two brackets; the note after 鬱沏 must not borrow the 、， of the first one
+    body = (
+        '<div type="juan"><p>甲乙<note type="comm">反切古法也</note>丙丁鬱沏'
+        '<note type="comm">切</note>迭而隆頽</p></div>'
+    )
+    parallel = "甲乙{{反切，古法也。}}丙丁鬱沏{{切}}迭而隆頽。"
+    plain = _plain(apply_parallel_punctuation(body, parallel)["body_xml"])
+    assert re.findall(r'<note type="comm">(.*?)</note>', plain) == ["反切，古法也。", "切"]
+
+
+def test_a_short_note_that_occurs_once_is_still_matched_by_content():
+    from kanripo_import.parallel_punct import apply_parallel_punctuation
+
+    body = '<div type="juan"><p>甲<note type="comm">戊</note>丁<note type="comm">丙</note>乙</p></div>'
+    plain = _plain(apply_parallel_punctuation(body, "甲{{丙，}}丁{{戊。}}乙。")["body_xml"])
+    assert re.findall(r'<note type="comm">(.*?)</note>', plain) == ["戊。", "丙，"]
+
+
+def test_a_mark_after_a_commentary_bracket_punctuates_the_base_text_not_the_note():
+    body = (
+        '<div type="juan"><p>天綱浡<note type="comm">蒲沒</note>潏<note type="comm">以出</note>'
+        '為凋為瘵<note type="comm">側界反言水之廣大為天綱紀</note>洪濤瀾汗萬里無際</p></div>'
+    )
+    parallel = "天綱浡{{蒲沒}}潏{{以出}}，為凋為瘵{{側界反。言水之廣大，為天綱紀。}}洪濤瀾汗，萬里無際。"
+    plain = _plain(apply_parallel_aligned(body, parallel)["body_xml"])
+    assert re.findall(r'<note type="comm">(.*?)</note>', plain)[1] == "以出"  # no copy of the comma
+    assert "潏，<note" in plain  # the comma is on the base text, before the note
