@@ -17,6 +17,12 @@
 - A comm note that opens a paragraph (with any page breaks around it) moves back to the end of the preceding paragraph, so a paragraph never breaks directly before inline commentary; the break stays where the base text resumes, and a paragraph left empty is dropped. `relocate_leading_comm_notes` used to do this only when the preceding paragraph ended in a sentence mark, which left stranded notes such as `亦珠母蚌類而能生出之` as paragraphs of their own. A preceding paragraph that is pure commentary is left alone.
 - `head`, `byline` and `trailer` lose trailing punctuation.
 
+#### Siku title block: title and attribution on one line (穆天子傳)
+
+- Some works print the title and the attribution on one line, separated by a run of ideographic spaces (`　穆天子傳卷一　　　　　　晉　郭璞　註`). The title-block reader expected them on separate lines, so for 穆天子傳 only 欽定四庫全書 became a head: the title, the attribution and `古文` were left as ordinary text and the AI step punctuated them as one sentence with the first line of the work (`穆天子傳卷一。晉郭璞註。古文飲天子蠲…`).
+- A block line now splits into `<head type="title">` and `<byline>` when it has a run of two or more `　` and each half looks like what it is (a title ending in a juan number; an attribution ending in a verb such as 撰 or 註). `註`, the variant of 注, is now an accepted attribution verb. A line with only a single space, or whose second half is not an attribution, is not split, and a byline line may not contain a juan number followed by more text (that would be a title).
+- Checked against every raw file at hand (爾雅注疏, 子夏易傳, 山海經, 方言, 穆天子傳): only 穆天子傳 juan 1–6 change. The 提要 page (juan 000), which packs the imprimatur and a category on one line, is deliberately left as it was. Re-import 穆天子傳; 山海經 files imported before the title-block work also need a re-import.
+
 #### Wikisource parallels: transfer by whole-juan alignment
 
 - A Siku body and Wikisource's 註疏 disagree about what is base text and what is commentary: the body runs 経 and 注 together as plain text and keeps 音義 and 疏 in notes, while Wikisource sets 注 in `（…）` and 疏 as ordinary paragraphs. Matching base text only with base text and notes only with notes left most of a juan untouched (KR1j0004: 1–20% of the Han punctuated).

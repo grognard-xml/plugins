@@ -183,11 +183,21 @@ def _is_heading_blob(blob: str) -> bool:
 #     ...
 #     　山海經卷二            colophon repeating the title -> <trailer>
 #
+# Some works put the title and the attribution on ONE line, separated by a run of ideographic
+# spaces (穆天子傳):
+#
+#     　穆天子傳卷一　　　　　　晉　郭璞　註   title + juan number, then attribution
+#
+# which is read as the same two elements.
+#
 # Left as ``<p>``, the AI punctuation step joins them to the first body sentence.
 
 _IMPRIMATUR = "欽定四庫全書"
 _TITLE_LINE_RE = re.compile(r"^.{1,30}[卷巻][〇零一二三四五六七八九十百廿卅\d]+$")
-_BYLINE_RE = re.compile(r"^.{0,16}[撰著譯注校輯編]$")
+_BYLINE_RE = re.compile(r"^.{0,16}[撰著譯注註校輯編]$")
+# A juan number followed by more text means the line carries a title too: not a pure attribution.
+_TITLE_INSIDE_RE = re.compile(r"[卷巻][〇零一二三四五六七八九十百廿卅\d]+.")
+_LINE_GAP_RE = re.compile(r"　{2,}")  # a run of ideographic spaces between two parts of one line
 _BLOCK_LINE_MAX = 20
 _INDENT_CHARS = "　"
 
@@ -200,6 +210,22 @@ def _compact_line(raw_line: str) -> str:
 
 def _is_indented(raw_line: str) -> bool:
     return _PB_TAG_RE.sub("", raw_line).lstrip(" \t").startswith(_INDENT_CHARS)
+
+
+def _split_title_byline(line: str) -> tuple[str, str] | None:
+    """``(title, byline)`` when one block line carries both, separated by a run of 　 (2 or more).
+
+    Both halves must look like what they are (a title ending in a juan number; an attribution
+    ending in a verb such as 撰 or 註), so an ordinary indented line is never split.
+    """
+    text = _PB_TAG_RE.sub("", line).replace("¶", "").strip(" \t")
+    parts = [part.strip("　 \t") for part in _LINE_GAP_RE.split(text.lstrip("　")) if part.strip("　 \t")]
+    if len(parts) != 2:
+        return None
+    title, byline = parts
+    if _TITLE_LINE_RE.match(_compact_line(title)) and _BYLINE_RE.match(_compact_line(byline)):
+        return title, byline
+    return None
 
 
 def _title_block_roles(lines: list[str]) -> dict[int, str]:
@@ -226,12 +252,16 @@ def _title_block_roles(lines: list[str]) -> dict[int, str]:
         if not (_is_indented(line) and plain and len(compact) <= _BLOCK_LINE_MAX):
             block_open = False
             continue
-        if "title" not in roles.values() and _TITLE_LINE_RE.match(compact):
+        split = _split_title_byline(line) if "title" not in roles.values() else None
+        if split is not None:
+            roles[index] = "title+byline"
+            title = _compact_line(split[0])
+        elif "title" not in roles.values() and _TITLE_LINE_RE.match(compact):
             roles[index] = "title"
             title = compact
-        elif "byline" not in roles.values() and _BYLINE_RE.match(compact):
+        elif "byline" not in roles.values() and "title+byline" not in roles.values() and _BYLINE_RE.match(compact) and not _TITLE_INSIDE_RE.search(compact):
             roles[index] = "byline"
-        elif "title" in roles.values():
+        elif "title" in roles.values() or "title+byline" in roles.values():
             roles[index] = "head"
         else:
             block_open = False
@@ -287,6 +317,15 @@ def body_to_tei_div(body: str) -> str:
         ends = stripped.endswith("¶")
         piece = stripped[:-1].rstrip() if ends else stripped
         role = roles.get(line_index)
+        if role == "title+byline":
+            if current and not all(part.startswith("<pb:") for part in current):
+                flush_current()
+            title_part, byline_part = _split_title_byline(line) or (piece, "")
+            lead = "".join(current)
+            current.clear()
+            paragraphs.append(f'<head type="title">{_inline_to_xml(lead + title_part)}</head>')
+            paragraphs.append(f"<byline>{_inline_to_xml(byline_part)}</byline>")
+            continue
         if role:
             if current and not all(part.startswith("<pb:") for part in current):
                 flush_current()
