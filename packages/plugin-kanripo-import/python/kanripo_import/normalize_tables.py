@@ -28,6 +28,15 @@ class Normalizer:
         for variant, norm in variant_to_norm.items():
             if len(variant) == 1 and len(norm) == 1:
                 mapping[ord(variant)] = norm
+        # Compatibility ideographs (U+F900-FAFF, U+2F800-2FA1F) have a canonical decomposition to
+        # their unified form. The table covers most of them; any it lacks fall back to that, so the
+        # normalised text never carries a compatibility code point the table happened to miss.
+        for codepoint in (*range(0xF900, 0xFB00), *range(0x2F800, 0x2FA20)):
+            if codepoint in mapping:
+                continue
+            unified = unicodedata.normalize("NFC", chr(codepoint))
+            if len(unified) == 1 and unified != chr(codepoint):
+                mapping[codepoint] = unified
         self._trans = str.maketrans(mapping)
 
     @classmethod

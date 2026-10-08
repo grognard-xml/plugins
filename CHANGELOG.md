@@ -17,6 +17,38 @@
 - A comm note that opens a paragraph (with any page breaks around it) moves back to the end of the preceding paragraph, so a paragraph never breaks directly before inline commentary; the break stays where the base text resumes, and a paragraph left empty is dropped. `relocate_leading_comm_notes` used to do this only when the preceding paragraph ended in a sentence mark, which left stranded notes such as `亦珠母蚌類而能生出之` as paragraphs of their own. A preceding paragraph that is pure commentary is left alone.
 - `head`, `byline` and `trailer` lose trailing punctuation.
 
+#### Wikisource parallels: transfer by whole-juan alignment
+
+- A Siku body and Wikisource's 註疏 disagree about what is base text and what is commentary: the body runs 経 and 注 together as plain text and keeps 音義 and 疏 in notes, while Wikisource sets 注 in `（…）` and 疏 as ordinary paragraphs. Matching base text only with base text and notes only with notes left most of a juan untouched (KR1j0004: 1–20% of the Han punctuated).
+- New `apply_parallel_aligned`: the juan's Han (notes included) is aligned against the parallel as one ordered sequence, and marks and paragraph breaks are copied across every stretch that lines up, whatever either edition calls it. Anchors of at least 3 Han, stretches of at least 10 matched Han at 70% density; a mark is copied only where its anchoring character itself aligned (after the variant fold), so unmatched text such as 音義 notes the other edition lacks is left alone instead of guessed. Existing marks are never doubled and the body's own paragraph breaks are kept.
+- For a Wikisource source it is the primary transfer; the older tape and comm passes run only when it covers less than 30% of the juan (front matter), and it then fills what they leave. Coverage is reported on the full tape, notes included, so the ratio, the quality warnings and the bars agree. KR1j0004: body juan 60–84%.
+- A paragraph break that falls inside a note moves to where the note closes, and only when base text follows, so a paragraph never opens with a note and a note is never split (the 疏 paragraph now starts a paragraph, as on Wikisource). A paragraph that opens with `《`, `「` or `（` no longer loses its break. `（…）` brackets are never copied into the body.
+- Commentary conventions are read from the parallel, not from one work: `（…）`, `(…)`, Wikisource `〈…〉` and ctext inline-comment spans. `〈…〉` text stays in the aligned sequence (it was being stripped, which dropped mark transfer on 荀子 and 後漢書 from ~100% to 31–51% before this was caught). Checked on 荀子, 後漢書 and 史記 against the previous code: marks and paragraph breaks reproduce at least as well, including with 10% of the body's characters altered (100% recall and precision).
+
+#### Commentary the parallel brackets becomes a note (KRP's own notes untouched)
+
+- Body text KRP left as plain text that aligns to parenthesised parallel text is wrapped in `<note type="comm">`: in 爾雅注疏 the plain 注 becomes `注<note type="comm">…</note>`, the literal 注 / 音義 / 疏 label staying outside as it does for KRP's own notes. About 1,640 notes on KR1j0004. Text already in a note or head, and anything across a paragraph boundary, is never wrapped; runs under 2 Han are ignored. Where the page itself does not bracket the 注 (some of 卷01) nothing is added.
+- A gloss that runs over a Kanripo print-line wrap was wrapped once per line; the fragments are joined into one note (they were 284 notes, each with a wrong closing 。). Only notes the wrapper created are joined: a KRP note is never merged, retyped or resized.
+- A variant character at the start of a gloss (牕 against 窗) is pulled into the note when the parallel character it is paired with is bracketed; the label stays outside. The end of a run is deliberately not treated this way: what follows a run is usually the next label.
+- A run never ends inside a label. Two-Han labels are learned from the body itself (a string seen right before KRP's own notes at least 5 times and before 3% of them; 音義 here), so a text whose notes follow ordinary prose learns none. This fixed 16 notes that absorbed the 音 of 音義 where Wikisource's 注 happens to contain 音, which also looked like "音。義" in the imported files.
+
+#### Wikisource 十三經註疏: citation headers
+
+- Every 疏 paragraph opens by citing the lemma (`疏「…」。○釋曰：`, `疏「…」至「…」`, `【疏】「…」`, `疏「…」。注「…」。○釋曰：`, `注「…」。○釋曰：`). The Siku 疏 note carries none of it, and left in it is a second, quoted copy of the 経 or 注 that the body anchored to, taking the quotation marks with it. `strip_shu_citations` removes the citation and 釋曰 and keeps a 疏 label. It acts only on a text with at least 3 such headers, so a stray `疏「…」` paragraph in another work is left alone.
+
+#### Kanripo conversion: a note that wraps over several lines
+
+- A line ending in `¶` ended the paragraph even inside an open `(…)`, so a long 疏 note spanning lines was cut and the juan failed with "Unclosed '(' in Kanripo commentary". 13 of the 23 juan of KR1j0004 could not be imported at all (never in any earlier version). A paragraph break now waits until the note closes.
+
+#### Parallel crosswalk: Siku trees are no longer offered
+
+- All 2,596 Wikisource crosswalk entries pointed at the `(四庫全書本)` tree, which is an unpunctuated scan transcription, and the label stripped the suffix, so the dropdown read "Wikisource — 爾雅注疏" for a source with almost no punctuation. Those trees are skipped as parallels; the label keeps the page title. `data/concordance/wikisource_punctuated_overrides.json` (hand-maintained, wins over Wikidata) names the punctuated tree instead; KR1j0004 now points at 爾雅註疏.
+
+#### DPM variant table: rows that turned ordinary characters into compatibility ideographs
+
+- Seven hand-added rows at the end of `dpm_variant_normalisation_table.csv` mapped a character to its compatibility twin (請 → U+FABB, 靖 → U+FAC8, 晴, 鬒, 愼 → U+2F8A8, …) and, coming later, overrode the table's own correct rows. In KR1j0004 that changed 38 characters. Six rows are removed and the 愼 row now points at 慎.
+- `Normalizer` falls back to the canonical Unicode decomposition for any compatibility ideograph the table lacks (e.g. KRP's own 兔 U+2F80F, which the source uses 30 times); the curated table still wins (舘 → 館). Only when normalisation is chosen: with it off the text is exactly KRP's. New test: no row may map into a compatibility block.
+
 ### 0.1.2
 
 Punctuation transfer from reference sources is substantially more accurate; the detailed write-ups of each fix follow below. In short:

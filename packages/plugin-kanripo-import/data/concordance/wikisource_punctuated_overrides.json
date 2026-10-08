@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "note": "Hand-maintained. Punctuated Wikisource trees to offer as parallel sources, replacing the unpunctuated 四庫全書本 tree from Wikidata.",
+  "entries": {
+    "KR1j0004": {
+      "kr_id": "KR1j0004",
+      "label": "爾雅註疏",
+      "url": "https://zh.wikisource.org/zh-hans/%E7%88%BE%E9%9B%85%E8%A8%BB%E7%96%8F"
+    }
+  }
+}

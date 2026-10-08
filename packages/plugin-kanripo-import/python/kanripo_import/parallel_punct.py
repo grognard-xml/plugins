@@ -660,7 +660,9 @@ def apply_comm_parallel_punctuation(
     }
 
 
-def _sticker_to_tape_map(sticker_han: str, tape: str, tape_start: int, tape_end: int) -> dict[int, int]:
+def _sticker_to_tape_map(
+    sticker_han: str, tape: str, tape_start: int, tape_end: int, *, strict: bool = False
+) -> dict[int, int]:
     """Map sticker han index → local index in ``tape[tape_start:tape_end]``.
 
     Uses equal runs plus 1:1 pairing inside replace blocks so variant normalization
@@ -670,6 +672,17 @@ def _sticker_to_tape_map(sticker_han: str, tape: str, tape_start: int, tape_end:
     if not sticker_han or not sub:
         return {}
     mapping: dict[int, int] = {}
+    if strict:
+        # Only characters that agree (after the 1:1 variant fold) carry marks: pairing unlike
+        # characters 1:1 would lend a note marker like 音義 the marks of unrelated parallel text.
+        matcher = SequenceMatcher(
+            a=_fold_han_variants(sticker_han), b=_fold_han_variants(sub), autojunk=False
+        )
+        for op, a0, a1, b0, b1 in matcher.get_opcodes():
+            if op == "equal":
+                for offset in range(a1 - a0):
+                    mapping[a0 + offset] = b0 + offset
+        return mapping
     matcher = SequenceMatcher(a=sticker_han, b=sub, autojunk=False)
     for op, a0, a1, b0, b1 in matcher.get_opcodes():
         if op == "equal":
@@ -691,6 +704,7 @@ def _sticker_to_tape_map(sticker_han: str, tape: str, tape_start: int, tape_end:
 # witnesses have likely diverged for real, and guessing a placement would do
 # more harm than dropping the mark.
 _MAX_GAP_BRIDGE = 6
+_WIKISOURCE_MAX_GAP_BRIDGE = 0
 
 
 def _nearest_mapped(
@@ -733,8 +747,12 @@ def _collect_insertions(
     sticker_han: str,
     *,
     split_sentences: bool = True,
+    max_gap: int = _MAX_GAP_BRIDGE,
 ) -> tuple[dict[int, str], dict[int, str], set[int]]:
     """Map parallel punctuation onto tape Han indices.
+
+    ``max_gap=0`` copies a mark only when the Han it follows (or precedes) itself aligned;
+    marks anchored on unmatched parallel text are dropped instead of bridged.
 
     Returns ``(after, before, para_after)``. Most marks (。、「, closing 》) sit
     after the preceding Han character. Marks that open a stretch before any
@@ -744,7 +762,9 @@ def _collect_insertions(
     after: dict[int, str] = {}
     before: dict[int, str] = {}
     para_after: set[int] = set()
-    sticker_to_sub = _sticker_to_tape_map(sticker_han, tape, tape_start, tape_end)
+    sticker_to_sub = _sticker_to_tape_map(
+        sticker_han, tape, tape_start, tape_end, strict=max_gap == 0
+    )
     sorted_keys = sorted(sticker_to_sub)
     span = tape_end - tape_start
     han_in_sticker = 0
@@ -754,14 +774,14 @@ def _collect_insertions(
         if HAN_RE.fullmatch(char):
             if pending_nl >= 2:
                 local = _nearest_mapped(
-                    sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back"
+                    sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back", max_gap=max_gap
                 )
                 if local is not None and 0 <= local < span:
                     para_after.add(tape_start + local)
             pending_nl = 0
             if pending_before:
                 local = _nearest_mapped(
-                    sticker_to_sub, sorted_keys, han_in_sticker, direction="forward"
+                    sticker_to_sub, sorted_keys, han_in_sticker, direction="forward", max_gap=max_gap
                 )
                 if local is not None and 0 <= local < span:
                     at = tape_start + local
@@ -772,7 +792,10 @@ def _collect_insertions(
         if char == "\n":
             pending_nl += 1
             continue
-        pending_nl = 0
+        # An opening mark (《 「 （) belongs to the paragraph it starts, so it must not erase the
+        # blank line before it: the break is still owed to the first Han that follows.
+        if char not in _OPENING_PUNCT_CHARS:
+            pending_nl = 0
         if char in PUNCT_CHARS:
             # An opening mark (「『《（〔) always belongs to whatever Han
             # character comes *next*, not to the one before it -- gluing it
@@ -787,7 +810,7 @@ def _collect_insertions(
                 pending_before += char
                 continue
             local = _nearest_mapped(
-                sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back"
+                sticker_to_sub, sorted_keys, han_in_sticker - 1, direction="back", max_gap=max_gap
             )
             if local is not None and 0 <= local < span:
                 at = tape_start + local
@@ -795,6 +818,19 @@ def _collect_insertions(
                 if split_sentences and char in SENTENCE_END_PUNCT:
                     para_after.add(at)
     return after, before, para_after
+
+
+def _base_text_follows(atoms: list[str], index: int) -> bool:
+    """True when base-text Han (not a note, not a paragraph end) comes next after ``atoms[index]``."""
+    for atom in atoms[index + 1 :]:
+        if _is_insignificant_whitespace_atom(atom):
+            continue
+        if _is_markup(atom):
+            if _comm_note_atom(atom) or atom == "</p>" or _is_p_open(atom):
+                return False
+            continue
+        return bool(HAN_RE.fullmatch(atom))
+    return False
 
 
 def _comm_note_atom(atom: str) -> bool:
@@ -976,13 +1012,44 @@ def _open_stamp_if_needed(
     return opened_here, stamp_depth
 
 
+def _opening_mark_precedes(atoms: list[str], index: int) -> bool:
+    """True when the visible character just before ``atoms[index]`` is already an opening mark."""
+    for atom in reversed(atoms[:index]):
+        if _is_markup(atom):
+            continue
+        return atom in _OPENING_PUNCT_CHARS
+    return False
+
+
+def _punct_follows(atoms: list[str], index: int) -> bool:
+    """True when the next visible character after ``atoms[index]`` is already a mark."""
+    for atom in atoms[index + 1 :]:
+        if _is_markup(atom):
+            continue
+        return atom in PUNCT_CHARS
+    return False
+
+
 def _apply_han_jobs(
     body_xml: str,
     jobs: list[tuple[tuple[int, int], str, str]],
     *,
     reflow_paragraphs: bool = True,
+    keep_existing_marks: bool = False,
+    strict_marks: bool = False,
+    add_breaks_only: bool = False,
+    sentence_breaks: bool = True,
+    exact_ranges: bool = False,
 ) -> tuple[str, list[tuple[int, int]], list[CoverageSpan]]:
-    """Apply punctuation for several Han ranges in one pass."""
+    """Apply punctuation for several Han ranges in one pass.
+
+    ``keep_existing_marks`` drops an inserted mark when the body already has a mark right there.
+    ``strict_marks`` copies only marks anchored on a Han that aligned (see ``_collect_insertions``).
+    ``add_breaks_only`` (with ``reflow_paragraphs``) adds the parallel's paragraph breaks but never
+    removes a break the body already has. ``exact_ranges`` takes each job's range as already
+    aligned instead of re-searching it with the fuzzy overlap finder (which can trim a stretch's
+    first or last words).
+    """
     if not jobs:
         return body_xml, [], []
     atoms = _iter_xml_atoms_segmented(body_xml)
@@ -1001,11 +1068,14 @@ def _apply_han_jobs(
         sticker = han_only(parallel_text)
         if not sticker:
             continue
-        sub_overlap = find_han_overlap(tape[tape_start:tape_end], sticker)
-        if sub_overlap is None:
-            continue
-        abs_start = tape_start + sub_overlap[0]
-        abs_end = tape_start + sub_overlap[1]
+        if exact_ranges:
+            abs_start, abs_end = tape_start, tape_end
+        else:
+            sub_overlap = find_han_overlap(tape[tape_start:tape_end], sticker)
+            if sub_overlap is None:
+                continue
+            abs_start = tape_start + sub_overlap[0]
+            abs_end = tape_start + sub_overlap[1]
         stamp_ranges.append((abs_start, abs_end))
         seg_after, seg_before, seg_para = _collect_insertions(
             parallel_text,
@@ -1013,7 +1083,8 @@ def _apply_han_jobs(
             abs_start,
             abs_end,
             sticker,
-            split_sentences=label != "comm",
+            split_sentences=sentence_breaks and label != "comm",
+            max_gap=0 if strict_marks else _MAX_GAP_BRIDGE,
         )
         for key, value in seg_after.items():
             insertions_after[key] = insertions_after.get(key, "") + value
@@ -1039,6 +1110,10 @@ def _apply_han_jobs(
     if not reflow_paragraphs:
         reflow_start = reflow_end = -1
         para_after = set()
+    elif add_breaks_only:
+        reflow_start = reflow_end = -1
+    pending_split = False
+    break_after_marks = False
     out: list[str] = []
     han_seen = -1
     opened_here = 0
@@ -1047,11 +1122,12 @@ def _apply_han_jobs(
     skip_until = -1
     in_comm_note = False
 
+    stamped_han = bytearray(total + 1)
+    for start, end in stamp_ranges:
+        stamped_han[max(0, start) : min(total, end)] = b"\x01" * max(0, min(total, end) - max(0, start))
+
     def in_stamp(han_index: int) -> bool:
-        for start, end in stamp_ranges:
-            if start <= han_index < end:
-                return True
-        return False
+        return 0 <= han_index < total and stamped_han[han_index] == 1
 
     def close_stamp_at_boundary(atom: str) -> bool:
         return (
@@ -1092,14 +1168,53 @@ def _apply_han_jobs(
                 out, han_seen, opened_here, stamp_depth, in_stamp
             )
             prefix = insertions_before.get(han_seen, "")
+            if prefix and keep_existing_marks and _opening_mark_precedes(atoms, atom_index):
+                prefix = ""
             if prefix:
                 out.append(prefix)
         _emit_atom(out, atom)
+        if atom == "</note>" and pending_split:
+            # A break the parallel puts after the note's last character (e.g. before a new 疏
+            # paragraph) cannot fall inside the note: it goes where the base text resumes.
+            pending_split = False
+            if _base_text_follows(atoms, atom_index):
+                before_len = len(out)
+                opened_here, stamp_depth = _emit_paragraph_split(
+                    out, opened_here, stamp_depth, atoms, atom_index
+                )
+                if len(out) > before_len:
+                    skip_until = max(skip_until, _skip_natural_break_after_split(atoms, atom_index))
+        elif atom == "</p>":
+            pending_split = False
+            break_after_marks = False
+        if break_after_marks and not is_han and not _is_markup(atom) and atom in PUNCT_CHARS:
+            # The anchor already carries marks (e.g. a 。 from an earlier pass): the break goes
+            # after the last of them, not between the character and its mark.
+            if not _punct_follows(atoms, atom_index):
+                break_after_marks = False
+                before_len = len(out)
+                opened_here, stamp_depth = _emit_paragraph_split(
+                    out, opened_here, stamp_depth, atoms, atom_index
+                )
+                if len(out) > before_len:
+                    skip_until = max(skip_until, _skip_natural_break_after_split(atoms, atom_index))
         if is_han:
             extra = insertions_after.get(han_seen, "")
+            if extra and keep_existing_marks and _punct_follows(atoms, atom_index):
+                extra = ""
             if extra:
                 out.append(extra)
-            if (
+            if han_seen in para_after and in_comm_note:
+                pending_split = True
+            elif (
+                han_seen in para_after
+                and not in_comm_note
+                and not _comm_note_follows(atoms, atom_index)
+                and keep_existing_marks
+                and _punct_follows(atoms, atom_index)
+            ):
+                break_after_marks = True
+            elif (
                 han_seen in para_after
                 and not in_comm_note
                 and not _comm_note_follows(atoms, atom_index)
@@ -1278,10 +1393,14 @@ def apply_parallel_segmented_sources(
     return {"body_xml": xml, "coverage": coverage, "applied": applied_any}
 
 
-def coverage_from_stamps(body_xml: str) -> Coverage:
+def coverage_from_stamps(body_xml: str, *, segmented: bool = False) -> Coverage:
     """Rebuild coverage from existing ``type="grognard:parallel-punct"`` stretches
-    (legacy ``ana="…"`` stamps are still recognised)."""
-    atoms = _iter_xml_atoms(body_xml)
+    (legacy ``ana="…"`` stamps are still recognised).
+
+    ``segmented=True`` counts the Han inside ``<note type="comm">`` too, so indices and the
+    total match :func:`list_segments` and the coverage bars.
+    """
+    atoms = _iter_xml_atoms_segmented(body_xml) if segmented else _iter_xml_atoms(body_xml)
     tape, _ = _han_tape(atoms)
     total = len(tape)
     intervals: list[tuple[int, int]] = []
@@ -1374,6 +1493,7 @@ def _apply_parallel_at_range(
     *,
     segmented: bool = False,
     keep_end_boundary: bool = False,
+    max_gap: int = _MAX_GAP_BRIDGE,
 ) -> tuple[str, tuple[int, int] | None, str]:
     """Copy ``match_text`` punctuation onto ``body_xml`` over Han range ``[tape_start, tape_end)``.
 
@@ -1390,6 +1510,7 @@ def _apply_parallel_at_range(
         tape_end,
         sticker,
         split_sentences=False,
+        max_gap=max_gap,
     )
     atoms = _iter_xml_atoms_segmented(body_xml) if segmented else _iter_xml_atoms(body_xml)
     out: list[str] = []
@@ -1570,7 +1691,9 @@ def _fold_han_variants(text: str) -> str:
     )
 
 
-def _apply_one(body_xml: str, parallel_text: str) -> tuple[str, tuple[int, int] | None, str]:
+def _apply_one(
+    body_xml: str, parallel_text: str, *, max_gap: int = _MAX_GAP_BRIDGE
+) -> tuple[str, tuple[int, int] | None, str]:
     atoms = _iter_xml_atoms(body_xml)
     tape, _ = _han_tape(atoms)
     match_text = _normalize_parallel_match_text(parallel_text)
@@ -1584,7 +1707,14 @@ def _apply_one(body_xml: str, parallel_text: str) -> tuple[str, tuple[int, int] 
 
     tape_start, tape_end = overlap
     return _apply_parallel_at_range(
-        body_xml, match_text, sticker, tape, tape_start, tape_end, keep_end_boundary=True
+        body_xml,
+        match_text,
+        sticker,
+        tape,
+        tape_start,
+        tape_end,
+        keep_end_boundary=True,
+        max_gap=max_gap,
     )
 
 
@@ -1596,6 +1726,489 @@ def strip_inline_commentary(parallel_text: str) -> str:
 def apply_parallel_punctuation(body_xml: str, parallel_text: str) -> ParallelPunctResult:
     """Insert parallel punctuation/paragraphs onto the overlapping Han range."""
     return apply_parallel_sources(body_xml, [{"id": "paste", "label": "Paste", "text": parallel_text}])
+
+
+# --- Edition-tolerant sequence alignment -------------------------------------------------
+#
+# Two editions of one work rarely agree on what is base text and what is commentary: the Siku
+# 爾雅注疏 runs 經 and 郭璞注 together as plain text and keeps 疏 in ``<note type="comm">``,
+# while Wikisource's 爾雅註疏 sets 注 in （…） and 疏 as plain paragraphs. Matching base text
+# only with base text and commentary only with commentary leaves most of such a juan untouched.
+# This pass ignores those roles: it aligns the whole juan's Han against the whole parallel as one
+# ordered sequence and copies marks across every stretch that lines up well, whatever either
+# edition calls that stretch. Stretches that do not line up (音義 notes absent from the other
+# edition, genuinely different readings) are left alone rather than guessed.
+
+ALIGN_MIN_BLOCK = 3  # shortest exact run (Han) kept; a stretch still needs ALIGN_MIN_STRETCH
+ALIGN_MAX_GAP = 12  # most unmatched Han (either side) bridged inside one stretch
+ALIGN_MAX_GAP_SKEW = 8  # most the two sides' gaps may differ (insertion vs substitution)
+ALIGN_MIN_STRETCH = 10  # fewest matched Han for a stretch to be trusted
+ALIGN_MIN_DENSITY = 0.7  # matched / spanned Han inside a stretch
+
+_ALIGN_MARK_MAP = str.maketrans({"︰": "：", "﹔": "；"})
+
+
+# 十三經註疏 layout (zh.wikisource): every 疏 paragraph opens by *citing* the lemma it explains --
+# ``疏「明明、斤斤，察也」。○釋曰：…`` or ``疏「卬吾」至「我也」。○釋曰：…`` -- which the Siku 疏 note does
+# not carry. Left in, the citation is a second copy of the 經 text (now inside quotation marks) and
+# the 經 in the body can anchor to it, taking the quotes with it.
+_SHU_CITATION = r"[疏注]?[「『“][^」』”\n]*[」』”]"
+_SHU_HEADER_RE = re.compile(
+    r"^(?:【疏】|疏|注)"
+    rf"(?:[\s　]*{_SHU_CITATION}(?:[\s　]*至[\s　]*{_SHU_CITATION})?[。，、]?)*"
+    r"[\s　]*(?:[○〇][\s　]*)?"
+    r"(?:釋曰|正義曰|疏曰)?[：:︰]?[\s　]*",
+    re.M,
+)
+_SHU_MARKER_RE = re.compile(r"釋曰|正義曰|疏曰")
+SHU_LAYOUT_MIN_HEADERS = 3  # citation headers a text needs before it counts as 註疏 layout
+
+
+def strip_shu_citations(parallel_text: str) -> str:
+    """Drop the lemma citation(s) and 釋曰 that open a 十三經註疏 疏 paragraph, keeping a 疏 label.
+
+    Shapes seen on zh.wikisource: ``疏「…」。○釋曰：``, ``疏「…」至「…」。○釋曰：``,
+    ``【疏】「…」至「…」。○釋曰：``, ``疏「…」。注「…」。○釋曰：`` (a 疏 on a lemma *and* its 注) and
+    ``注「…」。○釋曰：`` (a 疏 on a 注). A paragraph that merely starts with 注 is only a header when it
+    also carries 釋曰, so ordinary 注 text is never touched.
+    """
+
+    def rewrite(match: re.Match[str]) -> str:
+        header = match.group(0)
+        cites = len(re.findall(_SHU_CITATION, header))
+        has_marker = bool(_SHU_MARKER_RE.search(header))
+        if header.startswith("注"):
+            real = cites >= 1 and has_marker
+        else:
+            real = len(header) > 1 and (cites >= 1 or has_marker)
+        return "疏" if real else header
+
+    # Only a text that really uses this layout is touched: a lone paragraph that happens to begin
+    # ``疏「…」`` in some other work is ordinary text, not a citation header.
+    headers = sum(1 for m in _SHU_HEADER_RE.finditer(parallel_text) if rewrite(m) == "疏" and len(m.group(0)) > 1)
+    if headers < SHU_LAYOUT_MIN_HEADERS:
+        return parallel_text
+    return _SHU_HEADER_RE.sub(rewrite, parallel_text)
+
+
+def prepare_wikisource_parallel(parallel_text: str) -> str:
+    """Wikisource edition markup that must not reach the matcher or the body."""
+    return strip_shu_citations(_clean_parallel_for_alignment(parallel_text))
+
+
+def _clean_parallel_for_alignment(parallel_text: str) -> str:
+    """Parallel text with edition-specific markup that must not be copied removed.
+
+    ``（…）`` brackets mark 注 in Wikisource's 註疏 but are plain text in a Siku body, so the
+    brackets themselves are dropped (their contents stay and still match). Compatibility
+    colons are mapped to the marks the importer knows.
+    """
+    text = parallel_text.translate(_ALIGN_MARK_MAP)
+    return text.replace("（", "").replace("）", "")
+
+
+def _aligned_stretches(
+    tape: str,
+    sticker: str,
+    covered: list[tuple[int, int]],
+) -> list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]]:
+    """Stretches ``(tape_start, tape_end, ref_start, ref_end, matched, blocks)`` outside ``covered``.
+
+    ``blocks`` are the exact ``(tape, ref, size)`` runs inside the stretch (including 2-Han runs
+    that sit between its anchors), for callers that need to know which tape Han really aligned to
+    which parallel Han. Only the anchors of at least ``ALIGN_MIN_BLOCK`` count toward the stretch.
+    """
+    if not tape or not sticker:
+        return []
+    folded_tape = _fold_han_variants(tape)
+    folded_sticker = _fold_han_variants(sticker)
+    covered_flags = bytearray(len(tape) + 1)
+    for start, end in covered:
+        lo, hi = max(0, start), min(len(tape), end)
+        if hi > lo:
+            covered_flags[lo:hi] = b"\x01" * (hi - lo)
+
+    blocks: list[tuple[int, int, int]] = []
+    small: list[tuple[int, int, int]] = []  # 2-Han blocks: too weak to anchor, fine inside a stretch
+    matcher = SequenceMatcher(None, folded_tape, folded_sticker, autojunk=False)
+    for block in matcher.get_matching_blocks():
+        if block.size < ALIGN_MIN_BLOCK:
+            if block.size >= 2 and not any(covered_flags[block.a : block.a + block.size]):
+                small.append((block.a, block.b, block.size))
+            continue
+        run_start: int | None = None
+        for offset in range(block.size + 1):
+            free = offset < block.size and not covered_flags[block.a + offset]
+            if free and run_start is None:
+                run_start = offset
+            elif not free and run_start is not None:
+                if offset - run_start >= ALIGN_MIN_BLOCK:
+                    blocks.append((block.a + run_start, block.b + run_start, offset - run_start))
+                run_start = None
+
+    stretches: list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]] = []
+    current: list[tuple[int, int, int]] = []
+
+    def close() -> None:
+        if not current:
+            return
+        matched = sum(size for _, _, size in current)
+        t_start, r_start = current[0][0], current[0][1]
+        t_end = current[-1][0] + current[-1][2]
+        r_end = current[-1][1] + current[-1][2]
+        span = max(t_end - t_start, r_end - r_start)
+        if matched >= ALIGN_MIN_STRETCH and matched / max(1, span) >= ALIGN_MIN_DENSITY:
+            inside = [
+                blk
+                for blk in small
+                if t_start <= blk[0] and blk[0] + blk[2] <= t_end
+                and r_start <= blk[1] and blk[1] + blk[2] <= r_end
+            ]
+            stretches.append(
+                (t_start, t_end, r_start, r_end, matched, sorted([*current, *inside]))
+            )
+        current.clear()
+
+    for a, b, size in blocks:
+        if current:
+            prev_a, prev_b, prev_size = current[-1]
+            gap_a = a - (prev_a + prev_size)
+            gap_b = b - (prev_b + prev_size)
+            if not (
+                gap_a <= ALIGN_MAX_GAP
+                and gap_b <= ALIGN_MAX_GAP
+                and abs(gap_a - gap_b) <= ALIGN_MAX_GAP_SKEW
+            ):
+                close()
+        current.append((a, b, size))
+    close()
+    return stretches
+
+
+WRAP_MAX_SUBSTITUTION = 4  # longest differing stretch (either side) still read as a variant
+
+
+def _flag_substituted_boundary_chars(
+    blocks: list[tuple[int, int, int]],
+    paren_flags: list[bool],
+    flagged: set[int],
+) -> None:
+    """Pull a variant character at the *start* of a parenthesised run into the run.
+
+    Where two editions write different characters for the same word (窗 / 牕), the pair does not
+    align, so the body character would be left outside the note that begins right after it.
+    Between two consecutive aligned blocks, the unmatched body characters and the unmatched
+    parallel characters are paired from the right (the side that touches the parenthesised
+    text); a body character is flagged only when the parallel character it is paired with is
+    itself parenthesised. Unpaired body characters (a label such as 注) stay outside, as KRP has
+    them.
+
+    Only the start boundary is read this way. After a run, the unmatched body characters are
+    usually the *next* label (音義, 疏), which must never be absorbed.
+    """
+    for (a, b, size), (a2, _b2, _size2) in zip(blocks, blocks[1:]):
+        w0, w1 = b + size, _b2
+        t0, t1 = a + size, a2
+        n_tape, n_ws = t1 - t0, w1 - w0
+        if n_tape <= 0 or n_ws <= 0 or max(n_tape, n_ws) > WRAP_MAX_SUBSTITUTION:
+            continue
+        if not paren_flags[w1] or paren_flags[w0 - 1]:
+            continue  # the next block must open a parenthesised run, the previous one must not be in it
+        for k in range(min(n_tape, n_ws)):
+            if paren_flags[w1 - 1 - k]:
+                flagged.add(t1 - 1 - k)
+
+
+def _commentary_as_parentheses(parallel_text: str) -> str:
+    """Express every commentary convention the parallel may use as ``（…）``.
+
+    Wikisource's ``〈…〉`` interlinear notes and ctext's inline-comment spans are commentary
+    *text* that the body has too, so it must stay in the aligned sequence (the older passes
+    removed it to match base text only). It is flagged as commentary the same way ``（…）`` is.
+    """
+    text = INLINE_COMM_RE.sub(lambda m: "（" + m.group(1) + "）", parallel_text)
+    return WIKISOURCE_COMM_RE.sub(lambda m: "（" + m.group(0)[1:-1] + "）", text)
+
+
+def _paren_han_flags(text: str) -> list[bool]:
+    """For each Han of ``text`` (in order): is it inside parentheses ``（…）`` / ``(…)``?
+
+    Parentheses are how most punctuated editions mark interlinear commentary (注, 音義).
+    """
+    flags: list[bool] = []
+    depth = 0
+    for ch in text:
+        if ch in "（(":
+            depth += 1
+        elif ch in "）)":
+            depth = max(0, depth - 1)
+        elif HAN_RE.fullmatch(ch):
+            flags.append(depth > 0)
+    return flags
+
+
+_WRAP_BLOCK_TAG_RE = re.compile(r"</?(?:p|div|head|byline|trailer|lg|l|list|item|table|row|cell)\b", re.I)
+WRAP_MIN_RUN = 2  # fewest Han in a run worth turning into a note
+LABEL_MIN_COUNT = 5  # a 2-Han string seen this often right before KRP's own notes is a label
+LABEL_MIN_SHARE = 0.03  # ...and before at least this share of them
+WRAP_MAX_GAP = 3  # unmatched body Han bridged inside one run
+
+
+# ``</note></p>\n<p><note>``: one gloss cut by a Kanripo line wrap. The real body has a newline between
+# paragraphs, which ``SPLIT_COMM_RE`` (written for the compact form) does not match.
+# Only notes the wrapper created carry this temporary marker, so a note KRP itself marked is never
+# merged, retyped or resized (see docs/kanripo-commentary-principles.md).
+_WRAP_MARK = ' data-wrapped="1"'
+_WRAPPED_OPEN = f'<note type="comm"{_WRAP_MARK}>'
+_WRAPPED_SPLIT_NOTE_RE = re.compile(
+    re.escape(_WRAPPED_OPEN)
+    + r"((?:(?!</note>).)*)</note>\s*</p>\s*<p(?:\s[^>]*)?>\s*(<pb\b[^>]*/>\s*)?"
+    + re.escape(_WRAPPED_OPEN),
+    re.I | re.S,
+)
+
+
+def _join_split_notes(xml: str) -> str:
+    """Join wrapper-created notes that a paragraph break (any whitespace / page break) cut in two.
+
+    Both halves must be wrapper-created: a note KRP marked is never merged, on either side.
+    """
+    previous = None
+    while previous != xml:
+        previous = xml
+        xml = _WRAPPED_SPLIT_NOTE_RE.sub(
+            lambda m: _WRAPPED_OPEN + m.group(1) + (m.group(2) or "").strip(), xml
+        )
+    return xml
+
+
+def _learn_note_labels(atoms: list[str]) -> list[str]:
+    """Two-Han labels this body writes right before its own (KRP-marked) notes, e.g. 音義.
+
+    Learned from the text, not assumed: a string counts only if it precedes KRP's notes often
+    (``LABEL_MIN_COUNT`` times and ``LABEL_MIN_SHARE`` of all of them), so a text whose notes
+    follow ordinary prose learns none and nothing changes for it.
+    """
+    counts: dict[str, int] = {}
+    total = 0
+    history: list[str] = []
+    in_note = False
+    for atom in atoms:
+        if _is_markup(atom):
+            if NOTE_OPEN_COMM_RE.fullmatch(atom):
+                total += 1
+                if len(history) >= 2:
+                    key = "".join(history[-2:])
+                    counts[key] = counts.get(key, 0) + 1
+                history.clear()
+                in_note = True
+            elif atom == "</note>":
+                history.clear()  # what follows a note starts a new stretch of base text
+                in_note = False
+            elif _WRAP_BLOCK_TAG_RE.match(atom):
+                history.clear()
+            continue
+        if in_note:
+            continue
+        if HAN_RE.fullmatch(atom):
+            history.append(atom)
+        else:
+            history.clear()  # a mark between them: not one label
+    return [
+        key
+        for key, n in counts.items()
+        if n >= LABEL_MIN_COUNT and total and n / total >= LABEL_MIN_SHARE
+    ]
+
+
+def _wrap_paren_commentary(
+    body_xml: str,
+    flagged: set[int],
+    matched: set[int],
+) -> str:
+    """Wrap runs of base-text Han that aligned to parenthesised parallel text in a comm note.
+
+    ``flagged`` are full-tape Han indices that aligned to a Han inside ``（…）``; ``matched`` is
+    every aligned index (so a Han that aligned to *non*-parenthetical text ends a run). Han that
+    already sit in a note, a head, or across a paragraph boundary are never touched, and the
+    literal 注 / 音義 / 疏 label chars that precede a gloss stay outside, like the existing notes.
+    """
+    atoms = _iter_xml_atoms_segmented(body_xml)
+    labels = _learn_note_labels(atoms)
+    open_at: dict[int, int] = {}
+    close_after: set[int] = set()
+    han = -1
+    in_note = False
+    in_head = False
+    run: list[int] | None = None  # [first atom, last flagged atom, flagged count, gap]
+    run_atoms: list[int] = []  # atom index of each flagged Han in the run
+    gap_text: list[str] = []  # unmatched Han seen since the last flagged one
+
+    def end_run() -> None:
+        nonlocal run
+        if run is not None and run[2] >= WRAP_MIN_RUN:
+            open_at[run[0]] = run[1]
+            close_after.add(run[1])
+        run = None
+        run_atoms.clear()
+        gap_text.clear()
+
+    def trim_label_from_run(next_char: str = "") -> None:
+        """A run must not end inside the label KRP writes before its own next note.
+
+        ``next_char`` is the character that ended the run, when one did (a body character that
+        aligned to non-parenthetical text), so a label split between the run and that character
+        is recognised too.
+        """
+        if run is None or not labels:
+            return
+        after = "".join(gap_text) + next_char
+        if not after:
+            return
+        tail = "".join(atoms[i] for i in run_atoms[-2:]) + after
+        for label in labels:
+            if len(label) > len(after) and tail.endswith(label):
+                cut = len(label) - len(after)
+                del run_atoms[-cut:]
+                if not run_atoms:
+                    run[2] = 0
+                else:
+                    run[1] = run_atoms[-1]
+                    run[2] -= cut
+                break
+
+    for index, atom in enumerate(atoms):
+        if _is_markup(atom):
+            if NOTE_OPEN_COMM_RE.fullmatch(atom) or atom.startswith("<note"):
+                trim_label_from_run()
+                end_run()
+                in_note = True
+            elif atom == "</note>":
+                end_run()
+                in_note = False
+            elif HEAD_OPEN_RE.fullmatch(atom):
+                trim_label_from_run()
+                end_run()
+                in_head = True
+            elif HEAD_CLOSE_RE.fullmatch(atom):
+                trim_label_from_run()
+                end_run()
+                in_head = False
+            elif _WRAP_BLOCK_TAG_RE.match(atom):
+                # Kanripo's line wrap can fall between a label and its note (…音義</p><p><note>),
+                # so a paragraph boundary ends a run just as a note does.
+                trim_label_from_run()
+                end_run()
+            continue
+        if not HAN_RE.fullmatch(atom):
+            continue
+        han += 1
+        if in_note or in_head:
+            continue
+        if han in flagged:
+            if run is None:
+                run = [index, index, 0, 0]
+            run[1] = index
+            run[2] += 1
+            run[3] = 0
+            run_atoms.append(index)
+            gap_text.clear()
+        elif run is not None:
+            if han in matched:
+                trim_label_from_run(atom)
+                end_run()  # aligned to non-parenthetical parallel text: the gloss ended
+            else:
+                run[3] += 1
+                gap_text.append(atom)
+                if run[3] > WRAP_MAX_GAP:
+                    end_run()
+    end_run()
+    if not open_at:
+        return body_xml
+    out: list[str] = []
+    for index, atom in enumerate(atoms):
+        if index in open_at:
+            out.append(_WRAPPED_OPEN)
+        out.append(atom)
+        if index in close_after:
+            out.append("</note>")
+    return "".join(out)
+
+
+def apply_parallel_aligned(
+    body_xml: str,
+    parallel_text: str,
+    *,
+    covered: list[tuple[int, int]] | None = None,
+    source_label: str = "aligned",
+    wrap_commentary: bool = True,
+) -> ParallelPunctResult:
+    """Copy punctuation across every well-aligned stretch, ignoring base/commentary roles.
+
+    When the parallel marks commentary with parentheses, the body text aligned to it is first
+    wrapped in ``<note type="comm">`` (only on a body no earlier pass has stamped).
+
+    ``covered`` is Han ranges (full tape, notes included) to leave alone; by default whatever
+    ``body_xml`` already carries parallel-punct stamps for.
+    """
+    merged = merge_split_comm_notes(body_xml)
+    atoms = _iter_xml_atoms_segmented(merged)
+    tape, _ = _han_tape(atoms)
+    total = len(tape)
+    normalized = _commentary_as_parentheses(parallel_text)
+    paren_flags = _paren_han_flags(normalized)
+    cleaned = _clean_parallel_for_alignment(normalized)
+    sticker = han_only(cleaned)
+    if covered is None:
+        covered = [
+            (int(round(span["start"] * total)), int(round(span["end"] * total)))
+            for span in (coverage_from_stamps(merged, segmented=True).get("spans") or [])
+        ]
+    stretches = _aligned_stretches(tape, sticker, covered)
+    if wrap_commentary and not covered and any(paren_flags) and len(paren_flags) == len(sticker):
+        flagged: set[int] = set()
+        matched_idx: set[int] = set()
+        for *_bounds, blocks in stretches:
+            for a, b, size in blocks:
+                for offset in range(size):
+                    matched_idx.add(a + offset)
+                    if paren_flags[b + offset]:
+                        flagged.add(a + offset)
+            _flag_substituted_boundary_chars(blocks, paren_flags, flagged)
+        wrapped = _wrap_paren_commentary(merged, flagged, matched_idx)
+        # Kanripo hard-wraps plain text into one <p> per print line, so a gloss that runs over
+        # a line break was wrapped once per line: join those back into one note.
+        wrapped = _join_split_notes(wrapped).replace(_WRAP_MARK, "")
+        if wrapped != merged:
+            try:
+                assert_well_formed(wrapped)
+                same_tape = _han_tape(_iter_xml_atoms_segmented(wrapped))[0] == tape
+            except ET.ParseError:
+                same_tape = False
+            if same_tape:
+                merged = wrapped
+    jobs = [
+        ((t_start, t_end), _slice_text_by_han_range(cleaned, r_start, r_end), source_label)
+        for t_start, t_end, r_start, r_end, _matched, _blocks in stretches
+    ]
+    if not jobs:
+        return {"body_xml": body_xml, "coverage": _empty_coverage(total), "applied": False}
+
+    xml, intervals, spans = _apply_han_jobs(
+        merged,
+        jobs,
+        reflow_paragraphs=True,
+        add_breaks_only=True,
+        keep_existing_marks=True,
+        strict_marks=True,
+        sentence_breaks=False,
+        exact_ranges=True,
+    )
+    xml = _finalize_parallel_xml(merged, xml)
+    if xml == merged and intervals:
+        intervals, spans = [], []
+    coverage = _coverage_from_intervals(total, intervals, spans)
+    return {"body_xml": xml, "coverage": coverage, "applied": bool(intervals)}
 
 
 def apply_parallel_sources(
@@ -1617,9 +2230,13 @@ def apply_parallel_sources(
     matched_chapter_ids: list[str] = []
     used_chapters = set(str(item) for item in (used_chapter_ids or []))
     resolved_sources: list[tuple[str, str]] = []
+    aligned_labels: set[str] = set()  # sources transferred by the aligned pass already
+    raw_by_label: dict[str, str] = {}  # parallel text with its （…） commentary brackets intact
+    aligned_any = False
 
     for source in sources:
         parallel_text = str(source.get("text") or "")
+        raw_text = parallel_text
         label = str(source.get("label") or source.get("id") or "source")
         catalog_match = None
         if source.get("chapters"):
@@ -1628,6 +2245,11 @@ def apply_parallel_sources(
                 source,
                 used_ids=used_chapters,
             )
+            # Keep the （…） that mark 注 until the aligned pass has read them; the older passes
+            # get the bracket-free text (brackets are never copied into the body).
+            parallel_text = strip_shu_citations(parallel_text)
+            raw_text = parallel_text
+            parallel_text = _clean_parallel_for_alignment(parallel_text)
             if catalog_match:
                 matched_chapter_ids.extend(catalog_match["chapter_ids"])
                 if catalog_match["labels"]:
@@ -1638,7 +2260,27 @@ def apply_parallel_sources(
         if not parallel_text.strip():
             continue
         resolved_sources.append((label, parallel_text))
-        xml, overlap, preview = _apply_one(xml, parallel_text)
+        raw_by_label[label] = raw_text
+        if source.get("chapters"):
+            # A Wikisource edition is transferred by whole-juan alignment: it follows the
+            # parallel's own structure (lemma / 注 / 疏 paragraphs) instead of guessing which
+            # stretch of the juan a phrase belongs to. When it covers little of the juan (front
+            # matter, a single contiguous block) the older tape and comm passes below take over,
+            # and the aligned pass then only fills what they leave.
+            aligned = apply_parallel_aligned(xml, raw_text, source_label=f"{label}:aligned")
+            if aligned["applied"] and float(aligned["coverage"].get("ratio") or 0) >= LOW_OVERLAP_RATIO:
+                xml = aligned["body_xml"]
+                applied_any = aligned_any = True
+                aligned_labels.add(label)
+                continue
+        # Two editions of a Wikisource work differ at phrase level (注/疏 wording, absent 音義),
+        # so a mark anchored on unmatched text is more likely stranded than a lost-char slip:
+        # bridge only a character or two there, instead of the usual handful.
+        xml, overlap, preview = _apply_one(
+            xml,
+            parallel_text,
+            max_gap=_WIKISOURCE_MAX_GAP_BRIDGE if source.get("chapters") else _MAX_GAP_BRIDGE,
+        )
         if overlap is None:
             continue
         start, end = overlap
@@ -1655,7 +2297,7 @@ def apply_parallel_sources(
         )
 
     for label, parallel_text in resolved_sources:
-        if not WIKISOURCE_COMM_RE.search(parallel_text):
+        if label in aligned_labels or not WIKISOURCE_COMM_RE.search(parallel_text):
             continue
         comm_result = apply_comm_parallel_punctuation(
             xml,
@@ -1673,7 +2315,24 @@ def apply_parallel_sources(
             intervals.append((start, end))
             spans.append(span)
 
-    coverage = _coverage_from_intervals(total, intervals, spans)
+    for label, parallel_text in resolved_sources:
+        if label in aligned_labels:
+            continue
+        aligned = apply_parallel_aligned(
+            xml, raw_by_label.get(label, parallel_text), source_label=f"{label}:aligned"
+        )
+        if not aligned["applied"]:
+            continue
+        xml = aligned["body_xml"]
+        applied_any = aligned_any = True
+
+    if aligned_any:
+        # The aligned pass works on the full tape (comm-note Han included); report coverage on
+        # that same tape, from the stamps, so the ratio, the quality warnings and the coverage
+        # bars all agree.
+        coverage = coverage_from_stamps(xml, segmented=True)
+    else:
+        coverage = _coverage_from_intervals(total, intervals, spans)
     result: ParallelPunctResult = {
         "body_xml": xml,
         "coverage": coverage,

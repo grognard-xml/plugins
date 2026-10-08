@@ -259,8 +259,11 @@ def body_to_tei_div(body: str) -> str:
     current: list[str] = []
     lines = body.splitlines()
     roles = _title_block_roles(lines)
+    note_depth = 0
 
     def flush_current() -> None:
+        nonlocal note_depth
+        note_depth = 0
         if not current:
             return
         blob = "".join(current)
@@ -298,7 +301,11 @@ def body_to_tei_div(body: str) -> str:
             flush_current()
             continue
         current.append(piece)
-        if ends:
+        # A line-final pilcrow is a line break, not a paragraph end, while a ``(...)`` commentary
+        # note is still open: long 疏 notes wrap over many lines and must stay in one <p>.
+        bare = _GAIJI_BRACKET_RE.sub("", piece)
+        note_depth = max(0, note_depth + bare.count("(") - bare.count(")"))
+        if ends and note_depth == 0:
             flush_current()
 
     flush_current()

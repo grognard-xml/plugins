@@ -170,13 +170,56 @@ Per-juan fields from the Kanripo file header (juan number, source line) are unch
 
 ---
 
+### Edition-tolerant alignment (Wikisource parallels)
+
+`parallel_punct.apply_parallel_aligned` aligns the whole juan (base text and `<note type="comm">`
+alike) against the parallel as one ordered Han sequence, and copies marks **and paragraph breaks**
+across every stretch that lines up, whatever either edition calls that stretch. This is what lets a
+Siku body (経 + 注 as plain text, 音義 and 疏 in notes) take its punctuation and paragraphing from
+Wikisource's 註疏 (経 as a line, 注 in `（…）`, 疏 as its own paragraph).
+
+For a Wikisource source it is the primary transfer; the older tape and comm passes only run when it
+covers less than 30% of the juan (front matter, a single contiguous block), and it then fills what
+they leave. Rules:
+
+- Commentary conventions are read from the parallel, not from one work: `（…）`, `(…)`, Wikisource's
+  `〈…〉` and ctext's inline-comment spans all count as commentary. It stays in the aligned
+  sequence (so a body note is punctuated from it) and is flagged so body text aligned to it can
+  become a note. Checked against 荀子, 後漢書 and 史記 on Wikisource (`〈…〉` notes, plain prose,
+  footnotes), including a body whose characters were altered by up to 10%: marks and paragraph
+  breaks reproduce at least as well as the older passes (100% precision, 100% recall of marks whose
+  anchor aligned) and commentary that is plain text in the body is wrapped with no false notes.
+- **Only for the 十三經註疏 layout**: the `疏「lemma」。○釋曰：` citation that opens each 疏 paragraph
+  is dropped first (`strip_shu_citations`), because the Siku 疏 note does not carry it and, left in,
+  it is a second quoted copy of the 経 that the body can anchor to. It acts only on a text with at
+  least 3 such headers, so an isolated `疏「…」` in another work is ordinary text and left alone.
+- **Commentary becomes notes.** Most punctuated editions mark interlinear commentary with
+  parentheses, `（…）` or `(…)`. Body text that aligns to parenthesised parallel text is wrapped in
+  `<note type="comm">` (only on a juan no earlier pass has stamped): in 爾雅注疏 the plain-text 注 run
+  becomes `注<note type="comm">…</note>`, the literal 注 / 音義 / 疏 label staying outside, as the
+  existing 音義 and 疏 notes do. Text already in a note or head, and anything across a paragraph
+  boundary, is never wrapped; runs under 2 Han are ignored. The brackets themselves are never
+  copied into the body. (Before this, `(…)` was only recognised to *match* notes that already
+  existed in the body, never to create them.)
+- Anchors of at least 3 Han; stretches of at least 10 matched Han at 70% density; marks are copied
+  only where the anchoring character itself aligned (after the variant fold). Unmatched stretches
+  (音義 notes the other edition lacks, genuinely different readings) are left alone, not guessed.
+- Paragraph breaks are added where the parallel has one; the body's own breaks are kept. A break
+  that falls inside a note moves to where the note closes, and only when base text follows, so a
+  paragraph never opens with a note and a note is never split.
+- Existing marks are never doubled. Coverage is reported on the full tape (notes included).
+
+KR1j0004 (爾雅注疏 vs 爾雅註疏): body juan 60-84% punctuated and about 1,400 注 notes created; 考證
+files only where they quote the text. Wikisource `(四庫全書本)` trees are skipped as parallels (unpunctuated); hand-pick a punctuated
+tree in `data/concordance/wikisource_punctuated_overrides.json`.
+
 ## Parallel-source crosswalk (punctuation UI)
 
 `data/concordance/krp_parallel_sources.json` lists **Daozang-only** bundled paths (~1.5k works). **Wikisource** parallel buttons are derived at runtime from `krp_wikidata_by_kr_id.json` (~2.6k works). Python merges both in `kanripo_import.crosswalk.lookup_parallel_crosswalk()`.
 
 | Source at runtime | From |
 | --- | --- |
-| Wikisource URL + label | `krp_wikidata_by_kr_id.json` (`ws_url`, `ws_page`) |
+| Wikisource URL + label | `wikisource_punctuated_overrides.json` (hand-maintained, wins), else `krp_wikidata_by_kr_id.json` (`ws_url`, `ws_page`). Wikidata `(四庫全書本)` trees are skipped: they are unpunctuated transcriptions. |
 | Daozang `rel_path` | `krp_parallel_sources.json` |
 | Title, dz_id, cbeta_id | `krp_works_by_id.json` (joined by `kr_id`) |
 
