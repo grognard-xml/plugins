@@ -1,5 +1,15 @@
 # Grognard plugins changelog
 
+## plugin-cbeta-import
+
+### 0.1.2
+
+#### Import no longer fails with "work T2128: missing T54n2128.xml"
+
+- When the host passed a cache folder (`cache_root`, or `GROGNARD_PLUGIN_CACHE_PATH`) that held no corpus of its own, the plugin looked for the CBETA XML only inside that folder and ignored the corpus installed with the plugin (`data/corpus/xml-p5`). Resolving any work failed with `FileNotFoundError: work <id>: missing <file>.xml` (or `CBETA corpus is not synced`), and the status op reported the corpus as absent, although the files were on disk.
+- `corpus_dir(root)` now uses `<root>/corpus/xml-p5` when it holds a corpus, then the corpus bundled with the plugin, and only then the cache path as the target for a sync. `corpus_manifest_path(root)` follows the corpus in use, so the commit shown comes from the bundled `corpus.json`. The status op reads its manifest the same way.
+- Tests cover an explicit empty cache, a cache path from the environment, a multi-file work, a cache corpus taking priority, no corpus anywhere, the manifest and the status op.
+
 ## plugin-kanripo-import
 
 ### 0.1.3
