@@ -75,9 +75,21 @@ def corpus_is_present(path: Path) -> bool:
 
 
 def corpus_dir(root: Path | None = None) -> Path:
-    """The active xml-p5 tree: bundled install path, else legacy cache, else target for sync."""
+    """The active xml-p5 tree.
+
+    With an explicit ``root`` (a cache folder passed by the host or by ``GROGNARD_PLUGIN_CACHE_PATH``):
+    ``<root>/corpus/xml-p5`` when it holds a corpus, else the corpus bundled with the installed
+    plugin, else ``<root>/corpus/xml-p5`` (the place a sync would write to). Without ``root``:
+    bundled install path, else legacy cache, else the bundled path (target for sync).
+    """
     if root is not None:
-        return Path(root) / "corpus" / "xml-p5"
+        candidate = Path(root) / "corpus" / "xml-p5"
+        if corpus_is_present(candidate):
+            return candidate
+        bundled = bundled_corpus_dir()
+        if corpus_is_present(bundled):
+            return bundled
+        return candidate
     bundled = bundled_corpus_dir()
     if corpus_is_present(bundled):
         return bundled
@@ -92,6 +104,10 @@ def cached_catalog_index_path(root: Path | None = None) -> Path:
 
 
 def corpus_manifest_path(root: Path | None = None) -> Path:
+    """``corpus.json`` for the corpus ``corpus_dir(root)`` resolves to."""
     if root is not None:
-        return Path(root) / "corpus.json"
+        manifest = Path(root) / "corpus.json"
+        if not manifest.is_file() and corpus_dir(root) == bundled_corpus_dir():
+            return data_dir() / "corpus.json"
+        return manifest
     return data_dir() / "corpus.json"

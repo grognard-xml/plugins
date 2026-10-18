@@ -5,8 +5,10 @@ import unittest
 import zipfile
 from pathlib import Path
 
+from unittest import mock
+
 from _corpus import build_fake_corpus
-from cbeta_import import corpus_sync
+from cbeta_import import _paths, corpus_sync
 
 
 class CorpusSyncTest(unittest.TestCase):
@@ -17,6 +19,10 @@ class CorpusSyncTest(unittest.TestCase):
         self.cache.mkdir()
         self.src = self.tmp / "src"
         build_fake_corpus(self.src)  # src/ now holds T/ and L/ canon folders
+        # isolate from a corpus bundled with the dev checkout / installed plugin
+        patcher = mock.patch.object(_paths, "bundled_corpus_dir", lambda: self.tmp / "no-bundled-corpus")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def tearDown(self):
         self._tmp.cleanup()

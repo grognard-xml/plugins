@@ -84,12 +84,11 @@ def _write_manifest(data_root: Path, payload: dict[str, object]) -> None:
 
 
 def corpus_status(cache_root: Path | None = None) -> dict[str, object]:
-    data_root = _data_root(cache_root)
     checkout = _paths.corpus_dir(cache_root)
     is_git = (checkout / ".git").is_dir()
     present = is_git or _looks_like_corpus(checkout)
     manifest: dict[str, object] = {}
-    mpath = data_root / "corpus.json"
+    mpath = _paths.corpus_manifest_path(cache_root)
     if mpath.is_file():
         try:
             manifest = json.loads(mpath.read_text("utf-8"))
