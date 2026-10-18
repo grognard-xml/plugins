@@ -2,7 +2,7 @@
 
 ## plugin-cbeta-import
 
-### Unreleased
+### 0.1.3
 
 #### Dictionary entries and commentary kept (C1163 一切經音義)
 
@@ -31,7 +31,7 @@
 
 ## plugin-kanripo-import
 
-### Unreleased
+### 0.1.4
 
 #### Faster alignment of a juan against a whole parallel work
 
