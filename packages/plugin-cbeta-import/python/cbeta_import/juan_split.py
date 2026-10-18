@@ -184,25 +184,118 @@ def stitch_cross_file_juan(slices: list[JuanSlice]) -> list[str]:
     return notes
 
 
+_ENTRY_TAGS = (f"{_TEI}app", f"{_TEI}note")
+
+
+class _ApparatusIndex:
+    """The ``<back>`` of a work, indexed once so that pruning it to a juan is cheap.
+
+    An *entry* is an ``<app>`` or ``<note>`` whose parent is not an ``<app>``; the pruned copy for
+    a juan keeps an entry only if something inside it points at an ``xml:id`` found in that juan.
+    Re-cloning and re-scanning the whole ``<back>`` for every slice (the original approach) costs
+    (slices x ``<back>`` size): minutes for a 100-juan work split by section.
+    """
+
+    def __init__(self, back: etree._Element) -> None:
+        self.back = back
+        self.entries: list[etree._Element] = []
+        self._refs: dict[str, list[int]] = {}
+        self._info: dict[etree._Element, tuple] = {}
+        self._needs_prune: dict[etree._Element, bool] = {}
+        self._index(back)
+
+    def _index(self, back: etree._Element) -> None:
+        for el in back.iter(*_ENTRY_TAGS):
+            parent = el.getparent()
+            if parent is None or parent.tag == f"{_TEI}app":
+                continue
+            n = len(self.entries)
+            self.entries.append(el)
+            toks: set[str] = set()
+            for node in el.iter():
+                if not isinstance(node.tag, str):
+                    continue
+                for attr in _POINTER_ATTRS:
+                    v = node.get(attr)
+                    if v:
+                        toks.update(tok.lstrip("#") for tok in v.split())
+            for tok in toks:
+                self._refs.setdefault(tok, []).append(n)
+        self._entry_no = {el: n for n, el in enumerate(self.entries)}
+
+    def _prunable(self, node: etree._Element) -> bool:
+        """True if an entry lies strictly below ``node``."""
+        cached = self._needs_prune.get(node)
+        if cached is None:
+            cached = any(
+                (isinstance(c.tag, str) and (c in self._entry_no or self._prunable(c)))
+                for c in node
+            )
+            self._needs_prune[node] = cached
+        return cached
+
+    def _node_info(self, node: etree._Element):
+        """(children, tails, indices of children that must stay, {child index: entry number})."""
+        info = self._info.get(node)
+        if info is None:
+            children = list(node)
+            tails = [c.tail or "" for c in children]
+            fixed, entry_at = [], {}
+            for i, c in enumerate(children):
+                n = self._entry_no.get(c) if isinstance(c.tag, str) else None
+                if n is None:
+                    fixed.append(i)
+                else:
+                    entry_at[i] = n
+            info = (children, tails, fixed, entry_at)
+            self._info[node] = info
+        return info
+
+    def _prune(self, node: etree._Element, wanted: set[int], counter: list[int]) -> etree._Element:
+        if not self._prunable(node):
+            clone = copy.deepcopy(node)
+            return clone
+        children, tails, fixed, entry_at = self._node_info(node)
+        keep = fixed + [i for i, n in entry_at.items() if n in wanted]
+        keep.sort()
+        counter[0] += len(keep) - len(fixed)
+        new = etree.Element(node.tag, attrib=dict(node.attrib), nsmap=node.nsmap)
+        # text before the first kept child absorbs the tails of dropped entries in front of it
+        lead = "".join(tails[: keep[0]]) if keep else "".join(tails)
+        new.text = (node.text or "") + lead if (node.text or lead) else None
+        for j, i in enumerate(keep):
+            child = children[i]
+            if isinstance(child.tag, str):
+                copy_ = self._prune(child, wanted, counter)
+            else:
+                copy_ = copy.deepcopy(child)  # comment / processing instruction
+            nxt = keep[j + 1] if j + 1 < len(keep) else len(children)
+            tail = tails[i] + "".join(tails[i + 1 : nxt])
+            copy_.tail = tail or None
+            new.append(copy_)
+        return new
+
+    def prune_to(self, juan_ids: set[str]) -> tuple[etree._Element, int]:
+        wanted: set[int] = set()
+        for ident in juan_ids:
+            wanted.update(self._refs.get(ident, ()))
+        counter = [0]
+        clone = self._prune(self.back, wanted, counter)
+        clone.tail = self.back.tail
+        return clone, counter[0]
+
+
 def attach_apparatus(slices: list[JuanSlice], back: etree._Element | None) -> None:
     """Give each slice the ``<back>`` subtree pruned to the apparatus entries that
     reference an ``xml:id`` occurring in that juan (planning §5.5)."""
     if back is None:
         return
+    index = _ApparatusIndex(back)
     for sl in slices:
         juan_ids = _ids_in(sl.elements)
         if not juan_ids:
             continue
-        clone = copy.deepcopy(back)
-        kept = 0
-        for entry in list(clone.iter(f"{_TEI}app", f"{_TEI}note")):
-            parent = entry.getparent()
-            if parent is None or parent.tag in (f"{_TEI}app",):
-                continue  # nested note inside a kept app — leave it
-            if _refs_an_id(entry, juan_ids):
-                kept += 1
-            else:
-                _drop(entry)
+        clone, kept = index.prune_to(juan_ids)
         if kept:
             sl.apparatus = [clone]
 
@@ -227,35 +320,45 @@ def _rupture_parent_at(pivot: etree._Element) -> None:
     grand = parent.getparent()
     if grand is None:
         return
-    children = list(parent)
     try:
-        pivot_i = children.index(pivot)
+        pivot_i = parent.index(pivot)
     except ValueError:
         return
-    suffix = children[pivot_i:]
+    suffix = parent[pivot_i:]
     for el in suffix:
         parent.remove(el)
-    insert_pos = list(grand).index(parent) + 1
-    for offset, el in enumerate(suffix):
-        grand.insert(insert_pos + offset, el)
+    insert_pos = grand.index(parent) + 1
+    # one slice assignment instead of one ``insert`` per element: ``insert(i, …)`` walks to
+    # position i each time, which is quadratic in the number of lifted siblings
+    grand[insert_pos:insert_pos] = suffix
     if len(parent) == 0 and not (parent.text or "").strip() and not (parent.tail or "").strip():
         grand.remove(parent)
 
 
+def promote_to_body(body: etree._Element, markers: list[etree._Element]) -> int:
+    """Lift each of ``markers`` (in document order) up to a direct child of ``body``.
+
+    ``markers`` is computed once by the caller. Lifting a marker moves it and its following
+    siblings up one level in document order, so markers before it are unaffected and the first
+    still-nested marker is always the one being lifted: this is the same result as re-scanning
+    the whole body after every lift, without the quadratic cost. A marker that cannot be lifted
+    any further (no grandparent) is left where it is.
+    """
+    promoted = 0
+    for marker in markers:
+        while marker.getparent() is not body:
+            parent = marker.getparent()
+            _rupture_parent_at(marker)
+            promoted += 1
+            if marker.getparent() is parent:
+                break
+    return promoted
+
+
 def promote_juan_milestones_to_body(body: etree._Element) -> int:
     """Split nested ``<milestone unit="juan">`` boundaries up to top-level ``<body>`` children."""
-    promoted = 0
-    while True:
-        nested = [
-            m
-            for m in body.iter()
-            if _is_juan_milestone(m) and m.getparent() is not body
-        ]
-        if not nested:
-            break
-        _rupture_parent_at(nested[0])
-        promoted += 1
-    return promoted
+    nested = [m for m in body.iter() if _is_juan_milestone(m) and m.getparent() is not body]
+    return promote_to_body(body, nested)
 
 
 def split_body_into_juan(tree: etree._ElementTree | etree._Element) -> list[JuanSlice]:

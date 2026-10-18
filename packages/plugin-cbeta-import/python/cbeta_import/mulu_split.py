@@ -8,7 +8,7 @@ from pathlib import Path
 from lxml import etree
 
 from cbeta_import.constants import CB_NS, TEI_NS
-from cbeta_import.juan_split import JuanSlice, find_body, _rupture_parent_at
+from cbeta_import.juan_split import JuanSlice, find_body, promote_to_body
 
 _CB = f"{{{CB_NS}}}"
 _TEI = f"{{{TEI_NS}}}"
@@ -53,22 +53,18 @@ def _strip_redundant_head(block: list[etree._Element], title: str) -> list[etree
         return block
     if ((first.text or "").strip()) != title.strip():
         return block
+    if len(first):  # a note (or anything else) inside the head is not redundant: keep it
+        return block
     return block[1:]
 
 
 def _promote_mulu_markers_to_body(body: etree._Element) -> int:
-    promoted = 0
-    while True:
-        nested = [
-            m
-            for m in body.iter(f"{_CB}mulu")
-            if _is_section_mulu(m) and m.getparent() is not body
-        ]
-        if not nested:
-            break
-        _rupture_parent_at(nested[0])
-        promoted += 1
-    return promoted
+    nested = [
+        m
+        for m in body.iter(f"{_CB}mulu")
+        if _is_section_mulu(m) and m.getparent() is not body
+    ]
+    return promote_to_body(body, nested)
 
 
 def split_body_into_mulu(tree: etree._ElementTree | etree._Element) -> list[JuanSlice]:

@@ -353,4 +353,15 @@ def _convert(
             )
         )
         result.warnings.extend(sl.straddles)
+    left: dict[str, int] = {}
+    for j in result.juan:
+        for key, count in j.report.items():
+            if key.startswith("cb_left:"):
+                left[key[len("cb_left:") :]] = left.get(key[len("cb_left:") :], 0) + count
+    if left:
+        result.warnings.append(
+            "CBETA-specific elements left in the text, which a TEI-ALL project's schema does not "
+            "know (they may be hidden or flagged in the editor): "
+            + ", ".join(f"cb:{name} x{count}" for name, count in sorted(left.items()))
+        )
     return result.to_dict()

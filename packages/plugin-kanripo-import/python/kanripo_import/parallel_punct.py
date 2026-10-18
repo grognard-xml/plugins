@@ -12,6 +12,8 @@ from difflib import SequenceMatcher
 from typing import TypedDict
 from xml.etree import ElementTree as ET
 
+from kanripo_import.fast_align import haystack_for, matching_blocks
+
 # Han: Ext A, the main block, CJK compatibility ideographs, and planes 2-3 (Ext B through H). The
 # astral part matters: Kanripo texts use Ext B+ characters directly (e.g. 𪁺 U+2A07A), and a Han
 # test that stops at the BMP drops them from the tape and shifts every index after them.
@@ -227,6 +229,12 @@ def find_han_overlap_from(tape: str, sticker: str, start: int = 0) -> tuple[int,
     return start + rel_start, start + rel_end
 
 
+# Above this many tape x sticker cells the fuzzy comparison first narrows the tape to the stretch
+# that shares k-grams with the sticker (fast_align.Haystack), instead of letting difflib walk it all.
+FUZZY_WINDOW_CELLS = 5_000_000
+FUZZY_WINDOW_MIN_STICKER = 12
+
+
 def find_han_overlap(tape: str, sticker: str) -> tuple[int, int] | None:
     """Return ``(tape_start, tape_end)`` han indices, or None."""
     if not tape or not sticker:
@@ -235,6 +243,30 @@ def find_han_overlap(tape: str, sticker: str) -> tuple[int, int] | None:
         exact = tape.find(sticker)
         if exact >= 0:
             return exact, exact + len(sticker)
+        if len(tape) * len(sticker) > FUZZY_WINDOW_CELLS and len(sticker) >= FUZZY_WINDOW_MIN_STICKER:
+            window = haystack_for(tape).candidate_window(sticker)
+            if window is None:
+                return None  # shares too few k-grams with the tape to reach MIN_STICKER_COVER
+            start, end = window
+            found = _fuzzy_overlap(tape[start:end], sticker)
+            return None if found is None else (start + found[0], start + found[1])
+        return _fuzzy_overlap(tape, sticker)
+    # The sticker is the longer text (a whole parallel chapter against a short body excerpt):
+    # the indices returned are in ``tape``, so narrowing the sticker leaves them untouched.
+    exact = sticker.find(tape)
+    if exact >= 0:
+        return 0, len(tape)
+    if len(tape) * len(sticker) > FUZZY_WINDOW_CELLS and len(tape) >= FUZZY_WINDOW_MIN_STICKER:
+        window = haystack_for(sticker).candidate_window(tape)
+        if window is None:
+            return None
+        sticker = sticker[window[0] : window[1]]
+    return _fuzzy_overlap(tape, sticker)
+
+
+def _fuzzy_overlap(tape: str, sticker: str) -> tuple[int, int] | None:
+    """``find_han_overlap`` after the exact test: difflib over the whole of ``tape``."""
+    if len(sticker) <= len(tape):
         matcher = SequenceMatcher(a=tape, b=sticker, autojunk=False)
         all_blocks = [block for block in matcher.get_matching_blocks() if block.size > 0]
         if not all_blocks:
@@ -1278,6 +1310,19 @@ def _apply_han_jobs(
     return "".join(out), stamp_ranges, spans
 
 
+_han_positions_cache: list = [None, None]  # [text, positions] for the string last sliced
+
+
+def _han_positions(text: str) -> list[int]:
+    """Index in ``text`` of each Han character, in order. Cached while the same string is sliced
+    again and again (the parallel text is, once per paragraph): scanning it each time was the second
+    largest cost of a punctuation transfer."""
+    if _han_positions_cache[0] is not text:
+        _han_positions_cache[0] = text
+        _han_positions_cache[1] = [m.start() for m in HAN_RE.finditer(text)]
+    return _han_positions_cache[1]
+
+
 def _slice_text_by_han_range(text: str, han_start: int, han_end: int) -> str:
     """Extract a substring covering Han indices ``[han_start, han_end)``, plus
     trailing punctuation after the last kept Han character and opening
@@ -1295,23 +1340,15 @@ def _slice_text_by_han_range(text: str, han_start: int, han_end: int) -> str:
     """
     if han_start >= han_end:
         return ""
-    han_count = 0
-    start_char: int | None = None
-    end_char = len(text)
-    for index, char in enumerate(text):
-        if HAN_RE.fullmatch(char):
-            if han_count == han_start:
-                start_char = index
-            han_count += 1
-            if han_count == han_end:
-                end_char = index + 1
-                break
-    if start_char is None:
+    positions = _han_positions(text)
+    if han_start >= len(positions):
         return ""
+    start_char = positions[han_start]
     while start_char > 0 and text[start_char - 1] in _OPENING_PUNCT_CHARS:
         start_char -= 1
-    while end_char < len(text) and not HAN_RE.fullmatch(text[end_char]):
-        end_char += 1
+    # the last kept Han character plus the punctuation after it: up to the next Han character, or
+    # the end of the text when the range runs past the last one
+    end_char = positions[han_end] if han_end < len(positions) else len(text)
     return text[start_char:end_char]
 
 
@@ -1838,6 +1875,11 @@ def prepare_wikisource_parallel(parallel_text: str) -> str:
     return strip_shu_citations(_clean_parallel_for_alignment(parallel_text))
 
 
+# Scan-image markers some reference texts carry (<scanbegin file=".." page=".."/>, <scanend/>,
+# <scanbreak/>, <scanskip/>); they are not text and must not reach the TEI.
+_SCAN_MARKUP_RE = re.compile(r"<scan(?:begin|end|break|skip)\b[^>]*>")
+
+
 def _clean_parallel_for_alignment(parallel_text: str) -> str:
     """Parallel text with edition-specific markup that must not be copied removed.
 
@@ -1845,7 +1887,7 @@ def _clean_parallel_for_alignment(parallel_text: str) -> str:
     brackets themselves are dropped (their contents stay and still match). Compatibility
     colons are mapped to the marks the importer knows.
     """
-    text = parallel_text.translate(_ALIGN_MARK_MAP)
+    text = _SCAN_MARKUP_RE.sub("", parallel_text).translate(_ALIGN_MARK_MAP)
     return text.replace("（", "").replace("）", "")
 
 
@@ -1912,13 +1954,14 @@ def _aligned_stretches(
     # text on either side of it connected). Only afterwards is the stamped part left out.
     blocks: list[tuple[int, int, int]] = []
     small: list[tuple[int, int, int]] = []  # 2-Han blocks: too weak to anchor, fine inside a stretch
-    matcher = SequenceMatcher(None, folded_tape, folded_sticker, autojunk=False)
-    for block in matcher.get_matching_blocks():
-        if block.size < ALIGN_MIN_BLOCK:
-            if block.size >= 2:
-                small.append((block.a, block.b, block.size))
+    # ``matching_blocks`` is difflib's answer for small inputs. For a juan against a whole parallel
+    # work it anchors on unique runs first: difflib alone took minutes per juan (see fast_align).
+    for block_a, block_b, block_size in matching_blocks(folded_tape, folded_sticker):
+        if block_size < ALIGN_MIN_BLOCK:
+            if block_size >= 2:
+                small.append((block_a, block_b, block_size))
             continue
-        blocks.append((block.a, block.b, block.size))
+        blocks.append((block_a, block_b, block_size))
 
     stretches: list[tuple[int, int, int, int, int, list[tuple[int, int, int]]]] = []
     current: list[tuple[int, int, int]] = []

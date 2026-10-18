@@ -284,10 +284,36 @@ _ROLE_TAGS = {
 }
 
 
+_COMMENT_LINE_RE = re.compile(r"^#(?!\+)\s*[A-Za-z][\w-]*\s*:")
+_HEADING_NUMBER_RE = re.compile(r"^(\*+)\s*\d+\s+(?=\S)")
+_LEADING_NUMBER_RE = re.compile(r"^\d+(?=[^\x00-\x7f])")
+
+
+def _drop_editorial_markup(lines: list[str]) -> list[str]:
+    """Remove edition-numbering markup that is not text.
+
+    The TLS edition (e.g. 毛詩 KR1c0001) carries ``# src: SHI 096.1`` / ``# dating: 1101`` comment
+    lines, a number in front of each heading (``** 8 國風齊風第八``) and the poem number glued to the
+    title that follows the comments (``96《雞鳴》``). None of it is text.
+    """
+    out: list[str] = []
+    after_comment = False
+    for line in lines:
+        stripped = line.strip()
+        if _COMMENT_LINE_RE.match(stripped):
+            after_comment = True
+            continue
+        if after_comment and stripped:
+            line = _LEADING_NUMBER_RE.sub("", line.lstrip())
+            after_comment = False
+        out.append(_HEADING_NUMBER_RE.sub(r"\1", line) if stripped.startswith("**") else line)
+    return out
+
+
 def body_to_tei_div(body: str) -> str:
     paragraphs: list[str] = []
     current: list[str] = []
-    lines = body.splitlines()
+    lines = _drop_editorial_markup(body.splitlines())
     roles = _title_block_roles(lines)
     note_depth = 0
 

@@ -195,6 +195,105 @@ class StructuralTest(unittest.TestCase):
         self.assertNotIn(f"{_CB}note_key", body[0].attrib)
 
 
+class DictionaryDefTest(unittest.TestCase):
+    """``cb:def`` (the definition of a dictionary entry) is not TEI: without a mapping a project on
+    the TEI-ALL schema drops every definition of a work like 一切經音義."""
+
+    def test_single_p_becomes_def_with_p_attributes(self):
+        body = _frag(
+            '<entry><form>池沼</form><cb:def><p xml:id="p1" rend="inline">之遶反<lb n="1"/>'
+            '說文<note place="inline">注</note>。</p></cb:def></entry>'
+        )
+        self.assertEqual(downgrade.dictionary_defs(body), 1)
+        entry = body[0]
+        self.assertIsNone(entry.find(f"{_CB}def"))
+        d = entry.find(f"{_TEI}def")
+        self.assertEqual(d.get("{http://www.w3.org/XML/1998/namespace}id"), "p1")
+        self.assertIsNone(d.get("rend"))  # "inline" is what a <def> is anyway
+        self.assertIsNone(d.find(f"{_TEI}p"))  # <def> takes phrase content only
+        self.assertEqual("".join(d.itertext()), "之遶反說文注。")
+        self.assertIsNotNone(d.find(f"{_TEI}lb"))
+        self.assertIsNotNone(d.find(f"{_TEI}note"))
+
+    def test_each_paragraph_becomes_its_own_def_in_order(self):
+        body = _frag(
+            '<entry><cb:def>前<p rend="inline big">一</p><lb n="2"/><p>二</p> 後<note>n</note></cb:def></entry>'
+        )
+        downgrade.dictionary_defs(body)
+        defs = body[0].findall(f"{_TEI}def")
+        self.assertEqual(["".join(d.itertext()) for d in defs], ["前", "一", "二 後n"])
+        self.assertEqual(defs[1].get("rend"), "big")
+        self.assertIsNotNone(defs[1].find(f"{_TEI}lb"))  # follows the <def> it came after
+
+    def test_text_of_the_cb_def_is_not_lost(self):
+        body = _frag('<entry><cb:def>裸文字<p>段</p></cb:def><cb:def/></entry>')
+        downgrade.dictionary_defs(body)
+        self.assertEqual("".join(body.itertext()), "裸文字段")
+
+    def test_entry_place_becomes_rend(self):
+        body = _frag('<entry place="inline"><form>x</form></entry>')
+        downgrade._normalize_place_attrs(body)
+        self.assertNotIn("place", body[0].attrib)
+        self.assertEqual(body[0].get("rend"), "inline")
+
+    def test_juan_heading_note_is_kept(self):
+        body = _frag(
+            '<cb:juan n="1" fun="open"><cb:mulu type="卷"/><cb:jhead>音義卷第一'
+            '<note place="inline">大乘單本</note></cb:jhead></cb:juan><p>正文</p>'
+        )
+        downgrade.juan_blocks(body)
+        head = body.find(f"{_TEI}head")
+        self.assertEqual(head.get("type"), "juan")
+        self.assertEqual(head.find(f"{_TEI}note").text, "大乘單本")
+        # an opening heading without a note is still dropped (its title is on the juan <div>)
+        plain = _frag('<cb:juan n="1" fun="open"><cb:jhead>音義卷第一</cb:jhead></cb:juan><p>x</p>')
+        downgrade.juan_blocks(plain)
+        self.assertIsNone(plain.find(f"{_TEI}head"))
+
+    def test_remaining_cb_elements_are_counted(self):
+        body = _frag('<cb:event><p>x</p></cb:event><cb:event/><cb:def/>')
+        self.assertEqual(downgrade.remaining_cb_elements(body), {"event": 2, "def": 1})
+
+
+DICT_FIXTURE = Path(__file__).parent / "fixtures" / "dictionary_entries.xml"
+
+
+class DictionaryEndToEndTest(unittest.TestCase):
+    def test_cross_family_has_no_cb_def_and_keeps_every_character(self):
+        result = convert_cbeta_xml(DICT_FIXTURE, cross_family=True, split_unit="juan")
+        body = result["juan"][0]["body_xml"]
+        self.assertNotIn("<cb:def", body)
+        self.assertNotIn("<cb:", body)
+        self.assertEqual(body.count("<def"), 3)
+        for text in ("之遶反說文沼池也", "池水也", "又作梱同苦本反", "三蒼梱門限也", "注文",
+                     "大乘單本", "一名某經"):
+            self.assertIn(text, "".join(etree.fromstring(body.encode()).itertext()))
+        self.assertEqual(result["juan"][0]["report"]["defs_to_tei"], 3)
+        self.assertNotIn("CBETA-specific elements left", " ".join(result["warnings"]))
+
+    def test_mulu_split_keeps_the_note_in_a_head_that_repeats_the_title(self):
+        result = convert_cbeta_xml(DICT_FIXTURE, cross_family=True, split_unit="mulu")
+        text = "".join("".join(etree.fromstring(j["body_xml"].encode()).itertext()) for j in result["juan"])
+        self.assertIn("一名某經", text)
+
+    def test_cbeta_family_keeps_cb_def(self):
+        body = convert_cbeta_xml(DICT_FIXTURE, cross_family=False, split_unit="juan")["juan"][0]["body_xml"]
+        self.assertIn("<cb:def", body)
+
+    def test_unknown_cb_elements_are_reported_not_silent(self):
+        import tempfile
+
+        src = DICT_FIXTURE.read_text(encoding="utf-8").replace(
+            "</cb:div>\n    <cb:juan n=\"1\" fun=\"close\">",
+            "<cb:event><p>事件</p></cb:event></cb:div>\n    <cb:juan n=\"1\" fun=\"close\">",
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "T88n8889.xml"
+            path.write_text(src, encoding="utf-8")
+            result = convert_cbeta_xml(path, cross_family=True, split_unit="juan")
+        self.assertTrue(any("cb:event x1" in w for w in result["warnings"]), result["warnings"])
+
+
 class EndToEndTest(unittest.TestCase):
     def test_cross_family_leaves_no_cb_elements(self):
         result = convert_cbeta_xml(FIXTURE, cross_family=True, split_unit="juan")

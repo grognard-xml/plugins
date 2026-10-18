@@ -140,7 +140,17 @@ def juan_blocks(body: etree._Element) -> int:
             trailer.text = "".join(jhead.itertext()).strip() if jhead is not None else ""
             _splice(el, "", [trailer])
         else:  # open (or unmarked): the title is already on the juan <div>
-            _splice(el, "", [])
+            jhead = el.find(f"{_CB}jhead")
+            if jhead is not None and any(c.tag == f"{_TEI}note" for c in jhead):
+                # ...but a note in the juan heading (一切經音義 files the juan under a category
+                # there: ``卷第一<note place="inline">大乘單本</note>``) would be lost with it.
+                head = etree.Element(f"{_TEI}head", type="juan")
+                head.text = jhead.text
+                for child in list(jhead):
+                    head.append(child)
+                _splice(el, "", [head])
+            else:
+                _splice(el, "", [])
         n += 1
     return n
 
@@ -191,13 +201,13 @@ def _consume_mulu_into_structure(k: etree._Element, report: dict[str, int]) -> N
 
 
 def _normalize_place_attrs(body: etree._Element) -> int:
-    """TEI-ALL allows ``@place`` on ``<note>`` but not on ``<p>`` / ``<seg>``."""
+    """TEI-ALL allows ``@place`` on ``<note>`` but not on ``<p>`` / ``<seg>`` / ``<entry>``."""
     n = 0
     for el in body.iter():
         if not isinstance(el.tag, str) or "place" not in el.attrib:
             continue
         loc = _local(el.tag)
-        if loc not in ("p", "seg"):
+        if loc not in ("p", "seg", "entry"):
             continue
         place = el.attrib.pop("place")
         rend = el.get("rend")
@@ -325,6 +335,81 @@ def structural(body: etree._Element) -> int:
 
 
 # --------------------------------------------------------------------------- #
+# dictionary entries: <cb:def> → <def>
+
+
+def _inline_rend(rend: str | None) -> str | None:
+    """``rend`` without the ``inline`` token (a ``<def>`` is inline by nature)."""
+    toks = [tok for tok in (rend or "").split() if tok != "inline"]
+    return " ".join(toks) or None
+
+
+def dictionary_defs(body: etree._Element) -> int:
+    """``<cb:def>`` (the definition of a dictionary ``<entry>``, e.g. 一切經音義) → TEI ``<def>``.
+
+    ``cb:def`` is not part of TEI, so a project on the TEI-ALL schema does not know the element.
+    TEI ``<def>`` takes phrase-level content only, so each ``<p>`` inside a ``cb:def`` becomes
+    its own ``<def>`` (a ``cb:def`` with two paragraphs gives two ``<def>``s). Anything else inside
+    (loose text, ``<lb/>``, ``<note>``, …) is kept, in order, inside the ``<def>`` it follows, or in
+    a new one if there is none yet. Attributes of the ``<p>`` (``xml:id``, ``rend`` without
+    ``inline``) move to its ``<def>``. Returns the number of ``<def>`` elements created.
+    """
+    created = 0
+    for old in list(body.iter(f"{_CB}def")):
+        parent = old.getparent()
+        if parent is None:
+            continue
+        defs: list[etree._Element] = []
+
+        def new_def() -> etree._Element:
+            d = etree.Element(f"{_TEI}def")
+            defs.append(d)
+            return d
+
+        if old.text and old.text.strip():
+            new_def().text = old.text
+        for child in list(old):
+            if isinstance(child.tag, str) and child.tag == f"{_TEI}p":
+                cur = new_def()
+                for attr, value in child.attrib.items():
+                    if attr == "rend":
+                        value = _inline_rend(value)
+                        if value is None:
+                            continue
+                    cur.set(attr, value)
+                cur.text = child.text
+                for grand in list(child):
+                    cur.append(grand)
+                if child.tail and child.tail.strip():  # loose text after the <p> stays with it
+                    if len(cur):
+                        cur[-1].tail = (cur[-1].tail or "") + child.tail
+                    else:
+                        cur.text = (cur.text or "") + child.tail
+            else:
+                cur = defs[-1] if defs else new_def()
+                cur.append(child)  # anything else follows the <def> it comes after
+        if not defs:
+            new_def()
+        defs[-1].tail = old.tail
+        index = parent.index(old)
+        parent.remove(old)
+        for offset, d in enumerate(defs):
+            parent.insert(index + offset, d)
+        created += len(defs)
+    return created
+
+
+def remaining_cb_elements(body: etree._Element) -> dict[str, int]:
+    """CBETA-namespace elements still present (the project schema will not know them)."""
+    left: dict[str, int] = {}
+    for el in body.iter():
+        if isinstance(el.tag, str) and el.tag.startswith(_CB):
+            name = _local(el.tag)
+            left[name] = left.get(name, 0) + 1
+    return left
+
+
+# --------------------------------------------------------------------------- #
 
 
 def apply_cross_family(body: etree._Element) -> dict[str, int]:
@@ -333,4 +418,7 @@ def apply_cross_family(body: etree._Element) -> dict[str, int]:
     report.update(mulu_and_divs(body))
     report["cb_attrs_normalised"] = structural(body)
     report["place_attrs_normalised"] = _normalize_place_attrs(body)
+    report["defs_to_tei"] = dictionary_defs(body)
+    for name, count in remaining_cb_elements(body).items():
+        report[f"cb_left:{name}"] = count
     return report

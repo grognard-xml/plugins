@@ -2,6 +2,25 @@
 
 ## plugin-cbeta-import
 
+### Unreleased
+
+#### Dictionary entries and commentary kept (C1163 一切經音義)
+
+- `<cb:def>` and the other CBETA-only elements that wrap a dictionary entry or inline commentary were dropped by the downgrade to plain TEI, so the commentary shown on the CBETA site was missing and many juan were far shorter than the source. They are now converted to elements the editor accepts, and their text is kept. `<head>` content with notes in it keeps the notes.
+- Tests: `test_downgrade.py` (dictionary entries, with a fixture) and `test_split_equivalence.py`, which checks that the faster splitter gives the same juan and section files as before.
+
+#### Faster splitting of long works
+
+- Splitting a 100-juan work into juan or sections no longer re-scans the whole text for every cut: the apparatus is indexed once and the enclosing element of a cut point is looked up from that index. This took the 5-minute-plus import of C1163 under the Python timeout.
+
+### 0.1.2
+
+#### Import no longer fails with "work T2128: missing T54n2128.xml"
+
+- When the host passed a cache folder (`cache_root`, or `GROGNARD_PLUGIN_CACHE_PATH`) that held no corpus of its own, the plugin looked for the CBETA XML only inside that folder and ignored the corpus installed with the plugin (`data/corpus/xml-p5`). Resolving any work failed with `FileNotFoundError: work <id>: missing <file>.xml` (or `CBETA corpus is not synced`), and the status op reported the corpus as absent, although the files were on disk.
+- `corpus_dir(root)` now uses `<root>/corpus/xml-p5` when it holds a corpus, then the corpus bundled with the plugin, and only then the cache path as the target for a sync. `corpus_manifest_path(root)` follows the corpus in use, so the commit shown comes from the bundled `corpus.json`. The status op reads its manifest the same way.
+- Tests cover an explicit empty cache, a cache path from the environment, a multi-file work, a cache corpus taking priority, no corpus anywhere, the manifest and the status op.
+
 ### 0.1.2
 
 #### Import no longer fails with "work T2128: missing T54n2128.xml"
@@ -11,6 +30,22 @@
 - Tests cover an explicit empty cache, a cache path from the environment, a multi-file work, a cache corpus taking priority, no corpus anywhere, the manifest and the status op.
 
 ## plugin-kanripo-import
+
+### Unreleased
+
+#### Faster alignment of a juan against a whole parallel work
+
+- Aligning a juan (tens of thousands of Han) against a whole parallel text (about a million) took 80 s, and over 5 min when the two matched poorly, because `difflib` searches the longest common substring of every sub-range. New `fast_align.py` pins the alignment with anchors (runs of 5–12 characters that occur once in each text, chained by order) and passes only the small gaps to `difflib`. Short inputs still go straight to `difflib`. On a real juan against 毛詩正義, 99.96% of the characters in runs of four or more agree with `difflib`'s result.
+- Fuzzy search for a note's overlap in the parallel text now looks only at the stretch of the text where its k-grams cluster, in both directions, instead of the whole pool. Tests: `test_fast_align.py`.
+- This is what stopped juan from disappearing: an alignment that ran past the five-minute limit was killed and the juan was lost.
+
+#### Scan-image markers in a reference text are no longer copied
+
+- Reference texts that carry `<scanbegin/>`, `<scanend/>`, `<scanbreak/>` and `<scanskip/>` markers ended up with them in the output, and the validator reported "Tag scanbegin not allowed in head". They are removed from the parallel text before alignment. Test: `test_scan_markup.py`. Files imported earlier keep the markers.
+
+#### TLS edition numbering is no longer imported as text
+
+- Texts from the TLS edition (for example 毛詩, KR1c0001) have `# src: SHI 096.1` and `# dating: …` comment lines, a number before each heading (`** 8 國風齊風第八`) and the poem number in front of the title that follows the comments (`96《雞鳴》`). All of it became text (`#src:SHI096.1#dating:1101196《雞鳴》`). Comment lines are dropped, heading numbers are removed, and the leading number is removed only on the line after a comment block. Test: `test_kanripo_tei_editorial_markup.py`. Files imported earlier keep it.
 
 ### 0.1.3
 
