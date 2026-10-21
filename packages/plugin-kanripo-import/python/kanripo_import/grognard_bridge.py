@@ -61,6 +61,16 @@ def cli_main() -> None:
         sys.stdout.write("\n")
         return
 
+    if op == "fill_placeholders":
+        from kanripo_import.fill_placeholders import fill_placeholders
+
+        sources = payload.get("sources")
+        texts = [str(item.get("text") or "") for item in sources] if isinstance(sources, list) else []
+        body_xml, filled, left = fill_placeholders(str(payload.get("body_xml") or ""), texts)
+        json.dump({"body_xml": body_xml, "filled": filled, "left": left}, sys.stdout, ensure_ascii=False)
+        sys.stdout.write("\n")
+        return
+
     if op == "parallel_punct":
         from kanripo_import.parallel_punct import (
             apply_parallel_segmented_sources,

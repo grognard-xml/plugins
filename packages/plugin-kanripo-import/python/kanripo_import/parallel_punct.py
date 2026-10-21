@@ -2448,6 +2448,16 @@ def apply_parallel_sources(
         xml = aligned["body_xml"]
         applied_any = aligned_any = True
 
+    placeholders: dict = {}
+    if resolved_sources:
+        # Kanripo's own □ (a character its text could not encode) are filled from the references,
+        # where their context settles it. After the punctuation passes, so those never see a gap.
+        from kanripo_import.fill_placeholders import fill_placeholders
+
+        xml, filled, left = fill_placeholders(xml, [text for _, text in resolved_sources])
+        if filled or left:
+            placeholders = {"placeholders_filled": len(filled), "placeholders_left": len(left)}
+
     if aligned_any:
         # The aligned pass works on the full tape (comm-note Han included); report coverage on
         # that same tape, from the stamps, so the ratio, the quality warnings and the coverage
@@ -2462,6 +2472,7 @@ def apply_parallel_sources(
     }
     if matched_chapter_ids:
         result["matched_chapter_ids"] = matched_chapter_ids
+    result.update(placeholders)  # type: ignore[typeddict-item]
     return result
 
 
