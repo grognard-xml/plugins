@@ -13,6 +13,7 @@ Self-contained hybrid plugin: Mandoku → TEI conversion, bundled gaiji tables/P
 | Mandoku → TEI body | `python/kanripo_import/kanripo_tei.py` |
 | Gaiji (`&KRnnnn;`) resolution | `python/kanripo_import/kanripo_gaiji.py` |
 | KR-Gaiji charlist + PNGs | `data/gaiji/` |
+| Established `KRnnnn -> character` equivalents (win over the charlist) | `data/gaiji/equivalents.json` |
 | DPM + hard-replacement CSVs | `data/normalize/` |
 | Parallel punctuation | `python/kanripo_import/parallel_punct.py` |
 | Work search index (id, section, title, dynasty, authors, dzid) | `data/krp_works.json` |
@@ -300,6 +301,7 @@ See also `data/metadata/sources/README.md`.
 ---
 
 - Unicode or IDS entries from [kanripo/KR-Gaiji](https://github.com/kanripo/KR-Gaiji) resolve to characters or bracket notation.
+- The charlist is blank for about two thirds of its entries, so `data/gaiji/equivalents.json` holds the equivalents that have been identified and checked against the images (one code point each). They sit over the charlist and under the project's own table. Grognard ships the same table (`builtinGaijiEquivalents.json`), so an import through the app and one run by the plugin alone agree.
 - Image-only entries emit inline TEI:
 
   `<g type="kanripo" n="KR0954"><graphic url="_gaiji/KR0954.png" height="1em"/></g>`

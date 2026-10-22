@@ -1,5 +1,18 @@
 # Grognard plugins changelog
 
+## plugin-kanripo-import
+
+### Unreleased
+
+#### Gaiji equivalents ship with the plugin
+
+- 204 `KRnnnn -> character` equivalents (`data/gaiji/equivalents.json`), identified for the GuoPu corpus and checked against the images, now sit over the KR-Gaiji charlist, which is blank for all of them. The plugin resolves them on its own, as it does when Grognard passes its built-in table. The project table still wins.
+
+#### Page layout of 註疏, 考證 and □
+
+- The importer's last step lays 爾雅注疏 out as the 経 with its 注 inline, then one paragraph for its 音義 and 疏; joins the manuscript lines that Kanripo splits mid-sentence; keeps 考證 as one paragraph per source line; wraps a byline that precedes a head in an `<opener>`; and puts what follows the trailer in a `<div type="kaozheng">`. Notes that follow a 注, 註, 音義 or 疏 label get `subtype` zhu, shu or yinyi.
+- Kanripo's `□` placeholders are filled from the parallel text when their context settles it (`fill_placeholders.py`).
+
 ## plugin-cbeta-import
 
 ### 0.1.3

@@ -24,6 +24,10 @@ def gaiji_charlist_path() -> Path:
     return data_dir() / "gaiji" / "charlist.org.txt"
 
 
+def gaiji_equivalents_path() -> Path:
+    return data_dir() / "gaiji" / "equivalents.json"
+
+
 def gaiji_image_path(kr_id: str) -> Path:
     return data_dir() / "gaiji" / "images" / f"{kr_id}.png"
 

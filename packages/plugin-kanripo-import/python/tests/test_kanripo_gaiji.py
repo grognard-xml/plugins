@@ -101,3 +101,35 @@ def test_clean_overrides_drops_malformed_entries() -> None:
     )
     assert cleaned == {"KR2112": "𪁺", "KR2116": "[⿰魚甬]"}
     assert clean_gaiji_overrides(["not", "a", "dict"]) == {}
+
+
+def test_bundled_equivalents_are_single_characters_for_kanripo_ids() -> None:
+    import json
+    import re
+
+    from kanripo_import._paths import gaiji_equivalents_path
+
+    raw = json.loads(gaiji_equivalents_path().read_text(encoding="utf-8"))
+    assert raw and list(raw) == sorted(raw)
+    assert all(re.fullmatch(r"KR\d{4}", k) and len(v) == 1 for k, v in raw.items())
+    from kanripo_import.kanripo_gaiji import load_equivalents
+
+    assert load_equivalents() == raw  # none dropped by the cleaning
+
+
+def test_equivalents_fill_the_blank_charlist_entries_and_the_project_table_still_wins() -> None:
+    from kanripo_import import kanripo_gaiji as gaiji_mod
+
+    gaiji_mod.default_table.cache_clear()
+    table = default_table()
+    assert table["KR2608"] == "𪇆"  # blank in the charlist, an equivalent in the bundle
+    assert table["KR0003"] == "說"  # a charlist value with no equivalent is untouched
+    text, image_ids = resolve_kanripo_refs("六首名曰&KR2608;鳥", table)
+    assert (text, image_ids) == ("六首名曰𪇆鳥", [])
+    text, _ = resolve_kanripo_refs("&KR2608;", table, {"KR2608": "鸀"})
+    assert text == "鸀"
+    gaiji_mod.default_table.cache_clear()
+
+
+def test_a_gaiji_without_an_equivalent_stays_an_image() -> None:
+    assert "KR0954" not in __import__("kanripo_import.kanripo_gaiji", fromlist=["x"]).load_equivalents()

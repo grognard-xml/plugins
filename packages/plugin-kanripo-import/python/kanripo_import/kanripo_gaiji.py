@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import re
 import shutil
 from functools import lru_cache
 from pathlib import Path
 
-from kanripo_import._paths import gaiji_charlist_path, gaiji_image_path
+from kanripo_import._paths import gaiji_charlist_path, gaiji_equivalents_path, gaiji_image_path
 
 _KR_REF_RE = re.compile(r"&KR(\d{4});")
 _CHARLIST_LINE_RE = re.compile(r"^(KR\d+)\s+\d+\s*(.*?)\s*\[\[file:", re.DOTALL)
@@ -65,9 +66,25 @@ def load_gaiji_table(path: Path) -> dict[str, str | None]:
     return table
 
 
+def load_equivalents(path: Path | None = None) -> dict[str, str]:
+    """The ``KRnnnn -> character`` equivalents bundled with the plugin (empty if the file is absent)."""
+    path = path or gaiji_equivalents_path()
+    if not path.is_file():
+        return {}
+    return clean_gaiji_overrides(json.loads(path.read_text(encoding="utf-8")))
+
+
 @lru_cache(maxsize=1)
 def default_table() -> dict[str, str | None]:
-    return load_gaiji_table(gaiji_charlist_path())
+    """The KR-Gaiji charlist, with the bundled equivalents over it.
+
+    The charlist is blank for about two thirds of its entries and lossy (a normalised variant) for
+    another 706, so an equivalent that has been established and checked against the image wins over
+    it. The project's own table (``overrides`` of ``resolve_kanripo_refs``) still wins over both.
+    """
+    table = load_gaiji_table(gaiji_charlist_path())
+    table.update(load_equivalents())
+    return table
 
 
 def gaiji_inline_tag(kr_id: str) -> str:
