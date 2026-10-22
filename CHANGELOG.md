@@ -2,7 +2,7 @@
 
 ## plugin-kanripo-import
 
-### Unreleased
+### 0.1.5
 
 #### Gaiji equivalents ship with the plugin
 
