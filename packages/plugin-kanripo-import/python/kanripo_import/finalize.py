@@ -9,7 +9,8 @@ Runs after every punctuation step (as-is, parallel, AI) and never calls a model.
    (，、；：) becomes 。; anything else gets 。 appended.
 3. Headings (``head`` / ``byline`` / ``trailer``) carry no punctuation at their end.
 4. 註疏 layout (``注`` / ``音義`` / ``疏`` labels before notes): one ``<p>`` per entry, notes typed
-   by label (see ``group_zhushu_entries``).
+   by label (see ``group_zhushu_entries``), then laid out as the entry with its 注 in one paragraph and
+   the 音義 / 疏 in the next (see ``layout_zhushu_paragraphs``).
 5. Paragraphs that are only manuscript lines are joined (see ``join_wrapped_paragraphs``), except in
    the 考證 (see ``join_outside_kaozheng``).
 6. A ``<byline>`` that a ``<head>`` follows at the top of the juan goes in an ``<opener>`` (see
@@ -103,7 +104,7 @@ def _continues(content: str) -> bool:
     """True when a paragraph stops short of a sentence end. Tags (the parallel-punctuation <seg>s,
     page breaks) are not text. A title line never continues. A paragraph closed by a note has ended,
     unless the base text before the note stops on a weak mark: ``稱制，<note>…</note>`` goes on."""
-    if _is_title_line(content):
+    if _is_title_line(content) or _STARTS_SUB_RE.match(content):
         return False
     tail = _visible(content)
     if not tail:
@@ -133,6 +134,7 @@ def join_wrapped_paragraphs(xml: str) -> str:
             j + 1 < len(matches)
             and _continues(matches[j].group(1))
             and not _is_title_line(matches[j + 1].group(1))
+            and not _STARTS_SUB_RE.match(matches[j + 1].group(1))
             and _P_GAP_RE.fullmatch(xml[matches[j].end() : matches[j + 1].start()])
         ):
             j += 1
@@ -246,6 +248,178 @@ def group_zhushu_entries(xml: str) -> str:
     return "".join(out)
 
 
+# --- 註疏 layout: the entry with its 注 in one paragraph, the 音義 / 疏 in the next -----------------
+
+_NOTE_SPLIT_RE = re.compile(r"(<note\b[^>]*>.*?</note>)", re.DOTALL)
+_INLINE_SKIP = r"(?:<pb\b[^>]*/>|</?seg\b[^>]*>)*"
+# The end of a text run that is a 音義 / 疏 label (音義 may carry its lemma: 音義底畛<note>…).
+_SUBLABEL_TAIL_RE = re.compile(
+    r"(?:音義(?:<pb\b[^>]*/>)?[^<，。、；：？！「」『』（）]{0,8}|疏)" + _INLINE_SKIP + r"\Z"
+)
+_ONLY_SUBLABEL_RE = re.compile(rf"\A\s*{_INLINE_SKIP}(?:音義|疏|義){_INLINE_SKIP}\s*\Z")
+_STARTS_ZHU_RE = re.compile(
+    rf"\A(?:\s|<pb\b[^>]*/>|</?seg\b[^>]*>)*(?:<note\b[^>]*\bsubtype=\"zhu\"|注{_INLINE_SKIP}<note\b)"
+)
+_STARTS_SUB_RE = re.compile(
+    rf"\A(?:\s|<pb\b[^>]*/>|</?seg\b[^>]*>)*(?:音義[^<]{{0,8}}|疏|義){_INLINE_SKIP}<note\b"
+)
+_ONLY_TAGS_RE = re.compile(rf"\A\s*{_INLINE_SKIP}\s*\Z")
+_TRAILING_PBS_RE = re.compile(r"(?:<pb\b[^>]*/>)+\Z")
+_OPEN_TAG_RE = re.compile(r"<(/?)([A-Za-z][\w:.-]*)\b[^>]*?(/?)>")
+
+
+def _balanced(fragment: str) -> bool:
+    """True when every element opened in the fragment is closed in it, and none closes unopened."""
+    stack: list[str] = []
+    for closing, name, selfclosing in _OPEN_TAG_RE.findall(fragment):
+        if selfclosing:
+            continue
+        if not closing:
+            stack.append(name)
+        elif not stack or stack.pop() != name:
+            return False
+    return not stack
+
+
+def _split_entry_and_subcommentary(content: str) -> list[tuple[str, str]] | None:
+    """Cut one paragraph into ``("entry", …)`` and ``("sub", …)`` pieces, in order.
+
+    A piece of kind "sub" starts at a 音義 or 疏 label that is followed by its note and holds
+    the labels and notes after it; anything that is not a label after a sub note starts an entry
+    again. Returns None when a cut would fall inside an element (so nothing is split).
+    """
+    parts = _NOTE_SPLIT_RE.split(content)
+    pieces: list[list[str]] = []  # [kind, raw]
+    kind = "entry"
+
+    def add(piece_kind: str, raw: str) -> None:
+        if raw == "":
+            return
+        if pieces and pieces[-1][0] == piece_kind:
+            pieces[-1][1] += raw
+        else:
+            pieces.append([piece_kind, raw])
+
+    for index, part in enumerate(parts):
+        if index % 2 == 1:
+            add(kind, part)
+            continue
+        note_follows = index < len(parts) - 1
+        if kind == "sub" and (_ONLY_SUBLABEL_RE.match(part) or not part.strip()):
+            add("sub", part)
+            continue
+        label = _SUBLABEL_TAIL_RE.search(part) if note_follows else None
+        if label:
+            head, tail = part[: label.start()], part[label.start() :]
+            if _ONLY_TAGS_RE.match(head):
+                # only page breaks (or whitespace) before the label: they belong with it
+                kind = "sub"
+                add("sub", head + tail)
+                continue
+            if head.strip() or kind == "sub":
+                kind = "entry"
+                add("entry", head)
+            elif head:
+                add("entry" if pieces else "sub", head)
+            kind = "sub"
+            add("sub", tail)
+        else:
+            kind = "entry"
+            add("entry", part)
+    if all(_balanced(raw) for _, raw in pieces):
+        return [(k, raw) for k, raw in pieces]
+    return None
+
+
+def _paragraph_runs(xml: str, matches: list) -> list[list]:
+    """The paragraphs split into runs of directly adjacent ones (only whitespace between)."""
+    runs: list[list] = []
+    for m in matches:
+        if runs and _P_GAP_RE.fullmatch(xml[runs[-1][-1].end() : m.start()]):
+            runs[-1].append(m)
+        else:
+            runs.append([m])
+    return runs
+
+
+def _move_page_breaks_to_labels(pieces: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    """A page break at the end of an entry piece, right before a sub piece, goes with the sub piece."""
+    out = [list(piece) for piece in pieces]
+    for i in range(1, len(out)):
+        if out[i][0] == "sub" and out[i - 1][0] == "entry":
+            tail = _TRAILING_PBS_RE.search(out[i - 1][1])
+            if tail and tail.start() > 0:
+                out[i - 1][1] = out[i - 1][1][: tail.start()]
+                out[i][1] = tail.group(0) + out[i][1]
+    return [(k, raw) for k, raw in out]
+
+
+def _layout_run(run_xml: list[tuple[str, str]]) -> list[list]:
+    """[kind, raw, gap] for the pieces of one run, given each paragraph's (content, gap before)."""
+    items: list[list] = []
+    for content, gap in run_xml:
+        pieces = _split_entry_and_subcommentary(content)
+        pieces = _move_page_breaks_to_labels(pieces) if pieces else [("entry", content)]
+        for piece_kind, raw in pieces:
+            items.append([piece_kind, raw, gap])
+    merged: list[list] = []
+    for piece_kind, raw, gap in items:
+        if merged:
+            last = merged[-1]
+            if piece_kind == "sub" and last[0] == "sub":
+                last[1] += raw
+                continue
+            if piece_kind == "sub" and last[0] == "entry" and _ONLY_TAGS_RE.match(last[1]):
+                last[0], last[1] = "sub", last[1] + raw  # a paragraph of just a page break
+                continue
+            if piece_kind == "entry" and last[0] == "entry" and _STARTS_ZHU_RE.match(raw):
+                last[1] += raw
+                continue
+        merged.append([piece_kind, raw, gap])
+    return merged
+
+
+def layout_zhushu_paragraphs(xml: str) -> str:
+    """Lay a 註疏 juan out as: the 経 with its 注 in one ``<p>``, the 音義 and 疏 after it in one.
+
+    Only paragraph boundaries move; no character, tag or attribute changes. A paragraph that opens
+    with a 注 (a note typed zhu, or the label 注 and its note) joins the paragraph before it, so
+    the 注 is always inline with the 経 it explains; the 音義 / 疏 labels and notes that follow
+    an entry are cut into a paragraph of their own, and consecutive such paragraphs become one. A
+    page break just before a label goes with the label. A paragraph whose cut would fall inside
+    an element is left as it is. Acts only on a juan with at least 3 sub-commentary paragraphs and
+    3 注, and not on a 考證 juan.
+    """
+    if _is_kaozheng_juan(xml):
+        return xml
+    matches = list(_P_RE.finditer(xml))
+    runs = _paragraph_runs(xml, matches)
+    layouts = []
+    for run in runs:
+        run_xml = []
+        previous_end = run[0].start()
+        for m in run:
+            run_xml.append((m.group(1), xml[previous_end : m.start()]))
+            previous_end = m.end()
+        layouts.append(_layout_run(run_xml))
+    subs = sum(1 for layout in layouts for kind, _, _ in layout if kind == "sub")
+    zhus = sum(len(re.findall(r'subtype="zhu"', raw)) + len(re.findall(rf"注{_INLINE_SKIP}<note\b", raw)) for layout in layouts for _, raw, _ in layout)
+    if subs < 3 or zhus < 3:
+        return xml
+    out: list[str] = []
+    cursor = 0
+    for run, layout in zip(runs, layouts):
+        out.append(xml[cursor : run[0].start()])
+        gaps = [gap for _, _, gap in layout]
+        filler = next((g for g in gaps if g), "")
+        for index, (_, raw, gap) in enumerate(layout):
+            out.append("" if index == 0 else gap or filler)
+            out.append(f"<p>{raw}</p>")
+        cursor = run[-1].end()
+    out.append(xml[cursor:])
+    return "".join(out)
+
+
 _TOP_RUN_RE = re.compile(
     r"(<div\b[^>]*>)((?:\s*<(?:head|byline)\b[^>]*>.*?</(?:head|byline)>)+)", re.DOTALL
 )
@@ -339,7 +513,7 @@ def _finalize_once(xml: str) -> str:
     xml = relocate_leading_comm_notes(merge_split_comm_notes(xml))
     xml = terminate_comm_notes(xml)
     xml = strip_heading_trailing_punct(xml)
-    xml = terminate_comm_notes(group_zhushu_entries(xml))
+    xml = layout_zhushu_paragraphs(terminate_comm_notes(group_zhushu_entries(xml)))
     xml = wrap_after_trailer(xml)
     xml = join_outside_kaozheng(xml)
     return wrap_bylines_before_heads(xml)

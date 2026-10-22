@@ -6,6 +6,7 @@ import re
 
 from kanripo_import.ai_punct import coverage_from_punctuation, list_segments
 from kanripo_import.finalize import (
+    layout_zhushu_paragraphs,
     group_zhushu_entries,
     join_outside_kaozheng,
     join_wrapped_paragraphs,
@@ -211,20 +212,19 @@ ZHUSHU = (
 )
 
 
-def test_group_zhushu_entries_makes_one_paragraph_per_entry_and_types_the_notes():
+def test_zhushu_entries_are_grouped_typed_and_laid_out_as_entry_then_sub_commentary():
     out = finalize_body(f'<div type="juan">{ZHUSHU}</div>')
     paragraphs = re.findall(r"<p>(.*?)</p>", out, re.S)
-    assert len(paragraphs) == 4
-    assert paragraphs[0] == (
-        '格、懷，來也。注<note subtype="zhu" type="comm">皆求請也。</note>'
-        '疏<note subtype="shu" type="comm">謂招來也。</note>'
-    )
+    assert len(paragraphs) == 8  # four entries, each followed by its 音義 / 疏
+    assert paragraphs[0] == '格、懷，來也。注<note subtype="zhu" type="comm">皆求請也。</note>'
+    assert paragraphs[1] == '疏<note subtype="shu" type="comm">謂招來也。</note>'
     # the 音 that a note swallowed goes back to its 義, and plain 注 text becomes a note
-    assert '<note subtype="zhu" type="comm">今江東呼母為恀。</note>音義<note subtype="yinyi"' in paragraphs[1]
-    assert paragraphs[2].startswith(
-        '律、遹，述也。注<note subtype="zhu" type="comm">皆敘述也。</note>音義'
-    )
+    assert paragraphs[2] == '還、復，返也。注<note subtype="zhu" type="comm">今江東呼母為恀。</note>'
+    assert paragraphs[3].startswith('音義<note subtype="yinyi"') and paragraphs[3].endswith("</note>")
+    assert paragraphs[4] == '律、遹，述也。注<note subtype="zhu" type="comm">皆敘述也。</note>'
+    assert paragraphs[5].startswith("音義<note subtype=")
     assert han_only(out) == han_only(ZHUSHU)
+    assert finalize_body(out) == out
 
 
 def test_group_zhushu_entries_ignores_a_juan_without_the_labelled_layout():
@@ -313,3 +313,85 @@ def test_kaozheng_keep_their_source_lines():
     out = finalize_body(xml)
     assert "<p>惠帝即位尊呂后為太后。</p>" in out
     assert '<div type="kaozheng"><p>前漢書卷二考證</p><p>惠帝紀○臣召南按史記於</p><p>高祖，本紀後。</p></div>' in out
+
+
+# --- layout: the entry with its 注 in one paragraph, the 音義 / 疏 in the next -------------------
+
+Z = '<note type="comm" subtype="zhu">%s</note>'
+Y = '<note type="comm" subtype="yinyi">%s</note>'
+SH = '<note type="comm" subtype="shu">%s</note>'
+
+
+def _juan(*paragraphs: str, gap: str = "\n  ") -> str:
+    return '<div type="juan">' + "".join(f"{gap}<p>{p}</p>" for p in paragraphs) + "\n</div>"
+
+
+def _three_entries() -> list[str]:
+    return [f"甲、乙，始也。{Z % '注一。'}音義{Y % '音一。'}疏{SH % '疏一。'}",
+            f"丙，大也。{Z % '注二。'}音義{Y % '音二。'}疏{SH % '疏二。'}",
+            f"丁，小也。{Z % '注三。'}疏{SH % '疏三。'}"]
+
+
+def test_layout_cuts_each_entry_into_the_entry_with_its_zhu_and_one_sub_paragraph():
+    xml = _juan(*_three_entries())
+    out = layout_zhushu_paragraphs(xml)
+    paragraphs = re.findall(r"<p>(.*?)</p>", out, re.S)
+    assert paragraphs == [
+        f"甲、乙，始也。{Z % '注一。'}", f"音義{Y % '音一。'}疏{SH % '疏一。'}",
+        f"丙，大也。{Z % '注二。'}", f"音義{Y % '音二。'}疏{SH % '疏二。'}",
+        f"丁，小也。{Z % '注三。'}", f"疏{SH % '疏三。'}",
+    ]
+    assert out.count("\n  <p>") == 6  # the indentation between paragraphs is kept
+    assert re.sub(r"</?p>|\s", "", out) == re.sub(r"</?p>|\s", "", xml)  # nothing else changed
+    assert layout_zhushu_paragraphs(out) == out
+
+
+def test_layout_joins_a_zhu_that_starts_a_paragraph_and_merges_split_sub_paragraphs():
+    e = _three_entries()
+    xml = _juan(
+        "甲、乙，始也。", Z % "注一。", f"音義{Y % '音一。'}", f"疏{SH % '疏一。'}",
+        "丙，大也。注" + (Z % "注二。"), f"音義{Y % '音二。'}疏{SH % '疏二。'}",
+        e[2],
+    )
+    out = layout_zhushu_paragraphs(xml)
+    paragraphs = re.findall(r"<p>(.*?)</p>", out, re.S)
+    assert paragraphs[0] == f"甲、乙，始也。{Z % '注一。'}"
+    assert paragraphs[1] == f"音義{Y % '音一。'}疏{SH % '疏一。'}"
+    assert paragraphs[2] == f"丙，大也。注{Z % '注二。'}"
+    assert len(paragraphs) == 6 and not any(p.startswith("<note") for p in paragraphs)
+
+
+def test_layout_starts_a_new_entry_after_sub_commentary_and_keeps_page_breaks_in_order():
+    pb = '<pb n="P2"/>'
+    xml = _juan(f"甲，始也。{Z % '注一。'}{pb}音義{Y % '音一。'}疏{SH % '疏一。'}乙，大也。{Z % '注二。'}音義{Y % '音二。'}", *_three_entries()[1:])
+    out = layout_zhushu_paragraphs(xml)
+    paragraphs = re.findall(r"<p>(.*?)</p>", out, re.S)
+    assert paragraphs[1].startswith(pb + "音義")  # the page break goes with the label it precedes
+    assert paragraphs[2] == f"乙，大也。{Z % '注二。'}"
+    assert re.findall(r"<pb\b[^>]*/>", out) == [pb]
+
+
+def test_layout_leaves_a_paragraph_alone_when_a_cut_would_fall_inside_an_element():
+    unbalanced = f'<hi>甲，始也。{Z % "注一。"}音義</hi>{Y % "音一。"}'
+    xml = _juan(unbalanced, *_three_entries())
+    assert re.findall(r"<p>(.*?)</p>", layout_zhushu_paragraphs(xml), re.S)[0] == unbalanced
+
+
+def test_layout_needs_three_of_each_and_ignores_kaozheng_juan():
+    few = _juan(*_three_entries()[:2])
+    assert layout_zhushu_paragraphs(few) == few
+    kaozheng = _juan("爾雅注疏卷九考證", *_three_entries())
+    assert layout_zhushu_paragraphs(kaozheng) == kaozheng
+
+
+def test_layout_keeps_a_page_break_with_the_label_that_opens_a_paragraph():
+    pb = '<pb n="P9"/>'
+    e = _three_entries()
+    # a sub paragraph that opens with a page break, after an entry: the break stays with its label
+    xml = _juan(e[0].split("音義")[0], f"{pb}音義{Y % '音一。'}疏{SH % '疏一。'}", *e[1:])
+    paragraphs = re.findall(r"<p>(.*?)</p>", layout_zhushu_paragraphs(xml), re.S)
+    assert paragraphs[1] == f"{pb}音義{Y % '音一。'}疏{SH % '疏一。'}"
+    # a paragraph of only a page break, left by an earlier run, is merged into the sub paragraph after it
+    stray = _juan(e[0].split("音義")[0], pb, f"音義{Y % '音一。'}疏{SH % '疏一。'}", *e[1:])
+    paragraphs = re.findall(r"<p>(.*?)</p>", layout_zhushu_paragraphs(stray), re.S)
+    assert paragraphs[1] == f"{pb}音義{Y % '音一。'}疏{SH % '疏一。'}" and f"<p>{pb}</p>" not in "".join(paragraphs)
