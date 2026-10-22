@@ -205,7 +205,7 @@ they leave. Rules:
 - Anchors of at least 3 Han; stretches of at least 10 matched Han at 70% density; marks are copied
   only where the anchoring character itself aligned (after the variant fold). Unmatched stretches
   (音義 notes the other edition lacks, genuinely different readings) are left alone, not guessed.
-- Paragraph breaks are added where the parallel has one; the body's own breaks are kept. A break
+- Paragraph breaks are added where the parallel has one. For a Wikisource edition the body's line-wrap breaks are also replaced (`paragraph_reflow.py`): the body's base text is aligned with the base text of the parallel's blank-line paragraphs, a break goes at each paragraph start where the characters on both sides align, and a body break is removed only where both neighbours align and lie in one parallel paragraph. A break the alignment cannot judge, or that would cut an element, is left as it is. The result reports `paragraphs_reflowed` (`added`, `removed`). A break
   that falls inside a note moves to where the note closes, and only when base text follows, so a
   paragraph never opens with a note and a note is never split.
 - Existing marks are never doubled. Coverage is reported on the full tape (notes included).

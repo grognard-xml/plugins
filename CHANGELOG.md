@@ -8,6 +8,10 @@
 
 - 204 `KRnnnn -> character` equivalents (`data/gaiji/equivalents.json`), identified for the GuoPu corpus and checked against the images, now sit over the KR-Gaiji charlist, which is blank for all of them. The plugin resolves them on its own, as it does when Grognard passes its built-in table. The project table still wins.
 
+#### Wikisource paragraphs replace the line-wrap breaks
+
+- A Kanripo print-line text opens a `<p>` at every manuscript line, so a sentence is cut in two and neighbouring entries share a paragraph. The Wikisource transfer added the parallel's paragraph breaks but never removed the body's own. It now also replaces them (`paragraph_reflow.py`): the body's base text is aligned with the parallel's paragraphs, a break is made at each paragraph start the alignment is sure of, and a body break is removed only where both neighbouring characters align and sit in one parallel paragraph. A title block before the first entry is cut off from it. Only `<p>` boundaries change. Checked on the 山海經, all 18 juan against their Wikisource pages: the plugin gives 781 of the 865 paragraphs the standalone splitter gave; most of the rest differ because the transfer also turns plain commentary into notes, which changes what counts as base text.
+
 #### Page layout of 註疏, 考證 and □
 
 - The importer's last step lays 爾雅注疏 out as the 経 with its 注 inline, then one paragraph for its 音義 and 疏; joins the manuscript lines that Kanripo splits mid-sentence; keeps 考證 as one paragraph per source line; wraps a byline that precedes a head in an `<opener>`; and puts what follows the trailer in a `<div type="kaozheng">`. Notes that follow a 注, 註, 音義 or 疏 label get `subtype` zhu, shu or yinyi.

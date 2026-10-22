@@ -2264,8 +2264,13 @@ def apply_parallel_aligned(
     covered: list[tuple[int, int]] | None = None,
     source_label: str = "aligned",
     wrap_commentary: bool = True,
+    reflow: bool = False,
 ) -> ParallelPunctResult:
     """Copy punctuation across every well-aligned stretch, ignoring base/commentary roles.
+
+    With ``reflow`` the body also gets the parallel's paragraphs (``paragraph_reflow``): the line-wrap
+    breaks of a print-line text are replaced, where the editions agree, by the parallel's blank-line
+    paragraphs, which the transfer alone adds to but never takes from the body's own.
 
     When the parallel marks commentary with parentheses, the body text aligned to it is first
     wrapped in ``<note type="comm">`` (only on a body no earlier pass has stamped).
@@ -2316,6 +2321,17 @@ def apply_parallel_aligned(
     if not jobs:
         return {"body_xml": body_xml, "coverage": _empty_coverage(total), "applied": False}
 
+    reflowed_paragraphs: dict[str, int] = {}
+    if reflow:
+        # Before any stamp goes in: a <seg> would otherwise straddle the breaks to be moved. The Han
+        # tape does not change (only <p> boundaries do), so the stretches above still hold.
+        from kanripo_import.paragraph_reflow import reflow_to_parallel
+
+        reflowed = reflow_to_parallel(merged, parallel_text)
+        if reflowed["applied"] and _han_tape(_iter_xml_atoms_segmented(reflowed["body_xml"]))[0] == tape:
+            merged = reflowed["body_xml"]
+            reflowed_paragraphs = {"added": reflowed["added"], "removed": reflowed["removed"]}
+
     xml, intervals, spans = _apply_han_jobs(
         merged,
         jobs,
@@ -2330,7 +2346,10 @@ def apply_parallel_aligned(
     if xml == merged and intervals:
         intervals, spans = [], []
     coverage = _coverage_from_intervals(total, intervals, spans)
-    return {"body_xml": xml, "coverage": coverage, "applied": bool(intervals)}
+    result: ParallelPunctResult = {"body_xml": xml, "coverage": coverage, "applied": bool(intervals)}
+    if reflowed_paragraphs:
+        result["paragraphs_reflowed"] = reflowed_paragraphs  # type: ignore[typeddict-item]
+    return result
 
 
 def apply_parallel_sources(
@@ -2355,6 +2374,7 @@ def apply_parallel_sources(
     aligned_labels: set[str] = set()  # sources transferred by the aligned pass already
     raw_by_label: dict[str, str] = {}  # parallel text with its （…） commentary brackets intact
     aligned_any = False
+    reflowed_total: dict[str, int] = {}
 
     for source in sources:
         parallel_text = str(source.get("text") or "")
@@ -2389,11 +2409,15 @@ def apply_parallel_sources(
             # stretch of the juan a phrase belongs to. When it covers little of the juan (front
             # matter, a single contiguous block) the older tape and comm passes below take over,
             # and the aligned pass then only fills what they leave.
-            aligned = apply_parallel_aligned(xml, raw_text, source_label=f"{label}:aligned")
+            aligned = apply_parallel_aligned(
+                xml, raw_text, source_label=f"{label}:aligned", reflow=True
+            )
             if aligned["applied"] and float(aligned["coverage"].get("ratio") or 0) >= LOW_OVERLAP_RATIO:
                 xml = aligned["body_xml"]
                 applied_any = aligned_any = True
                 aligned_labels.add(label)
+                for key, value in (aligned.get("paragraphs_reflowed") or {}).items():  # type: ignore[attr-defined]
+                    reflowed_total[key] = reflowed_total.get(key, 0) + value
                 continue
         # Two editions of a Wikisource work differ at phrase level (注/疏 wording, absent 音義),
         # so a mark anchored on unmatched text is more likely stranded than a lost-char slip:
@@ -2473,6 +2497,8 @@ def apply_parallel_sources(
     if matched_chapter_ids:
         result["matched_chapter_ids"] = matched_chapter_ids
     result.update(placeholders)  # type: ignore[typeddict-item]
+    if reflowed_total:
+        result["paragraphs_reflowed"] = reflowed_total  # type: ignore[typeddict-item]
     return result
 
 
