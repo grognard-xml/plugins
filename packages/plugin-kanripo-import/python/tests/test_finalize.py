@@ -7,6 +7,7 @@ import re
 from kanripo_import.ai_punct import coverage_from_punctuation, list_segments
 from kanripo_import.finalize import (
     layout_zhushu_paragraphs,
+    type_label_notes,
     group_zhushu_entries,
     join_outside_kaozheng,
     join_wrapped_paragraphs,
@@ -395,3 +396,45 @@ def test_layout_keeps_a_page_break_with_the_label_that_opens_a_paragraph():
     stray = _juan(e[0].split("音義")[0], pb, f"音義{Y % '音一。'}疏{SH % '疏一。'}", *e[1:])
     paragraphs = re.findall(r"<p>(.*?)</p>", layout_zhushu_paragraphs(stray), re.S)
     assert paragraphs[1] == f"{pb}音義{Y % '音一。'}疏{SH % '疏一。'}" and f"<p>{pb}</p>" not in "".join(paragraphs)
+
+
+# --- typing the notes that follow a label ---------------------------------------------------------
+
+def test_untyped_notes_after_a_label_get_their_subtype():
+    n = '<note type="comm">%s</note>'
+    xml = _juan(
+        f"甲，始也。注{n % '注一。'}", f"音義{n % '音一。'}疏{n % '疏一。'}",
+        f"乙，大也。注{n % '注二。'}", f"釋詁第一音義底畛{n % '音二。'}疏{n % '疏二。'}",
+        f"丙，小也。注{n % '注三。'}",
+    )
+    out = type_label_notes(xml)
+    assert f'注<note type="comm" subtype="zhu">注一。</note>' in out
+    assert f'音義<note type="comm" subtype="yinyi">音一。</note>疏<note type="comm" subtype="shu">疏一。</note>' in out
+    assert '音義底畛<note type="comm" subtype="yinyi">音二。</note>' in out
+    assert re.sub(r' subtype="\w+"', "", out) == xml  # only an attribute is added
+    assert type_label_notes(out) == out
+
+
+def test_type_label_notes_leaves_other_notes_and_unlabelled_text_alone():
+    n = '<note type="comm">%s</note>'
+    # 注 / 疏 inside a word, an editor's note, and a note that already has a subtype
+    xml = _juan(f"爾雅注疏{n % '序。'}", f"臣{n % '臣。'}", '甲。注<note type="comm" subtype="zhu">x。</note>')
+    assert type_label_notes(xml) == xml  # fewer than three labelled notes anyway
+    many = _juan(*[f"字{i}。注{n % '注。'}" for i in range(3)], f"爾雅注疏{n % '序。'}")
+    out = type_label_notes(many)
+    assert out.count('subtype="zhu"') == 3 and f"爾雅注疏{n % '序。'}" in out
+
+
+def test_type_label_notes_reads_a_label_after_an_unpunctuated_jing_and_a_split_yinyi():
+    n = '<note type="comm">%s</note>'
+    xml = _juan(
+        f"甲，始也。注{n % '一。'}", f"音義{n % '二。'}疏{n % '三。'}", f"乙，大也。注{n % '四。'}",
+        f"闍謂之臺注{n % '積土四方。'}", f'音<pb n="P"/>義{n % "五。"}疏{n % "六。"}', f"爾雅序疏{n % '七。'}",
+        f"魯有大野。註{n % '今高平。'}", f"甲。注{n % '八。'}", f"音義{n % '九。'}疏{n % '十。'}", f"乙。注{n % '十一。'}疏{n % '十二。'}",
+    )
+    out = type_label_notes(xml)
+    assert '闍謂之臺注<note type="comm" subtype="zhu">積土四方。' in out
+    assert '音<pb n="P"/>義<note type="comm" subtype="yinyi">五。' in out
+    assert '爾雅序疏<note type="comm" subtype="shu">七。' in out
+    assert '魯有大野。註<note type="comm" subtype="zhu">今高平。' in out
+    assert re.sub(r' subtype="\w+"', "", out) == xml

@@ -379,6 +379,58 @@ def _layout_run(run_xml: list[tuple[str, str]]) -> list[list]:
     return merged
 
 
+_HAN_CLASS = "\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\U00020000-\U0003ffff"
+_UNTYPED_NOTE = r"<note\b(?![^>]*\bsubtype=)[^>]*\btype=\"comm\"[^>]*>"
+# 注 / 疏 are single characters: next to a mark, a tag or whitespace they are labels; right after a
+# Han character (an unpunctuated 経, 闍謂之臺注<note>) only in a juan that is plainly 註疏. 音義 is
+# distinctive, may follow text, may be cut by a page break (音<pb/>義) and may carry its lemma.
+_LABEL_NOTE_RES = {
+    "zhu": ("注", re.compile(rf"([注註]){_INLINE_SKIP}({_UNTYPED_NOTE})")),
+    "shu": ("疏", re.compile(rf"(疏){_INLINE_SKIP}({_UNTYPED_NOTE})")),
+    "yinyi": ("音義", re.compile(
+        rf"(音(?:<pb\b[^>]*/>)?義(?:<pb\b[^>]*/>)?[^<，。、；：？！「」『』（）]{{0,12}}){_INLINE_SKIP}({_UNTYPED_NOTE})"
+    )),
+}
+_AFTER_HAN_RE = re.compile(rf"[{_HAN_CLASS}]\Z")
+
+
+def _label_matches(xml: str, subtype: str, after_han: bool):
+    """Matches of the label-then-untyped-note pattern, with or without a Han character before it."""
+    out = []
+    for m in _LABEL_NOTE_RES[subtype][1].finditer(xml):
+        preceded_by_han = bool(_AFTER_HAN_RE.search(xml[max(0, m.start() - 1) : m.start()])) and subtype != "yinyi"
+        if preceded_by_han == after_han or subtype == "yinyi":
+            out.append(m)
+    return out
+
+
+def type_label_notes(xml: str) -> str:
+    """Give ``subtype`` zhu / yinyi / shu to an untyped comm note that follows its 注 / 音義 / 疏 label.
+
+    Only the opening tag changes (``subtype`` is added after ``type``). 注 and 疏 straight after a
+    Han character count only in a juan with at least 3 notes of each already labelled as such
+    (next to a mark, or typed), so a 疏 that ends a name elsewhere is left alone.
+    """
+    if _is_kaozheng_juan(xml):
+        return xml
+    strict = {s: _label_matches(xml, s, False) for s in ("zhu", "shu", "yinyi")}
+    typed = {s: len(re.findall(rf'subtype="{s}"', xml)) for s in ("zhu", "shu")}
+    if sum(len(v) for v in strict.values()) + sum(typed.values()) < 3:
+        return xml
+    zhushu = len(strict["zhu"]) + typed["zhu"] >= 3 and len(strict["shu"]) + typed["shu"] >= 3
+    spans = [(m.start(), m.end(), s) for s, matches in strict.items() for m in matches]
+    if zhushu:
+        spans += [(m.start(), m.end(), s) for s in ("zhu", "shu") for m in _label_matches(xml, s, True)]
+    out: list[str] = []
+    cursor = 0
+    for start, end, subtype in sorted(set(spans)):
+        out.append(xml[cursor:end - 1])
+        out.append(f' subtype="{subtype}">')
+        cursor = end
+    out.append(xml[cursor:])
+    return "".join(out)
+
+
 def layout_zhushu_paragraphs(xml: str) -> str:
     """Lay a 註疏 juan out as: the 経 with its 注 in one ``<p>``, the 音義 and 疏 after it in one.
 
@@ -513,7 +565,7 @@ def _finalize_once(xml: str) -> str:
     xml = relocate_leading_comm_notes(merge_split_comm_notes(xml))
     xml = terminate_comm_notes(xml)
     xml = strip_heading_trailing_punct(xml)
-    xml = layout_zhushu_paragraphs(terminate_comm_notes(group_zhushu_entries(xml)))
+    xml = layout_zhushu_paragraphs(type_label_notes(terminate_comm_notes(group_zhushu_entries(xml))))
     xml = wrap_after_trailer(xml)
     xml = join_outside_kaozheng(xml)
     return wrap_bylines_before_heads(xml)
