@@ -6,7 +6,7 @@
 
 #### Gaiji equivalents ship with the plugin
 
-- 204 `KRnnnn -> character` equivalents (`data/gaiji/equivalents.json`), identified for the GuoPu corpus and checked against the images, now sit over the KR-Gaiji charlist, which is blank for all of them. The plugin resolves them on its own, as it does when Grognard passes its built-in table. The project table still wins.
+- 205 `KRnnnn -> character` equivalents (`data/gaiji/equivalents.json`), identified for the GuoPu corpus and checked against the images, now sit over the KR-Gaiji charlist, which is blank for all of them. The plugin resolves them on its own, as it does when Grognard passes its built-in table. The project table still wins.
 
 #### Wikisource paragraphs replace the line-wrap breaks
 
