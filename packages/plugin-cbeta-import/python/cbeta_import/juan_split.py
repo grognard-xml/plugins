@@ -48,6 +48,11 @@ class JuanSlice:
     — the ``<app>``/`<note>` entries whose ``@from``/``@to`` point into it (§5.5)."""
     straddles: list[str] = field(default_factory=list)
     """Human-readable notes about content that crosses this juan boundary."""
+    in_juan: str = ""
+    """Mulu split only: the CBETA juan (``n`` of its ``<milestone unit="juan">``) this section is in."""
+    heads_included: bool = False
+    """Mulu split only: ``elements`` already open with the section's ``<head>``s (ancestor
+    headings as ``<head type="context">``, then the section's own), so the host adds none."""
 
 
 def _local(tag: object) -> str:

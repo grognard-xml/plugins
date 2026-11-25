@@ -10,6 +10,7 @@ image. Siddhaṃ (``#SD-…``) and Rañjana (``#RJ-…``) never resolve — kept
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 from lxml import etree
 
@@ -21,6 +22,35 @@ _TEI = f"{{{TEI_NS}}}"
 # (e.g. <mapping type="unicode">U+478B</mapping>), sometimes several
 # separated by whitespace or commas for a composed sequence.
 _CODEPOINT_RE = re.compile(r"^(?:[Uu]\+[0-9A-Fa-f]{4,6}[\s,]*)+$")
+
+
+def has_pua(text: str) -> bool:
+    """True if ``text`` holds a private-use code point (BMP, plane 15 or plane 16).
+
+    A PUA character has no meaning outside the file that defines it and no font has a
+    glyph for it — it shows as tofu or a fallback symbol (often a Yijing hexagram).
+    """
+    return any(
+        0xE000 <= ord(c) <= 0xF8FF or 0xF0000 <= ord(c) <= 0x10FFFD for c in text
+    )
+
+
+@dataclass(frozen=True)
+class GaijiInfo:
+    """What a CBETA ``<char>`` declaration says about a character that has no Unicode value."""
+
+    id: str
+    composition: str = ""
+    normalized: str = ""
+    pua: str = ""  # "U+F1D88"
+
+    def as_dict(self) -> dict[str, str]:
+        return {
+            "id": self.id,
+            "composition": self.composition,
+            "normalized": self.normalized,
+            "pua": self.pua,
+        }
 
 
 def _decode_mapping(text: str) -> str | None:
@@ -65,7 +95,7 @@ def load_char_decl(tree: etree._ElementTree | etree._Element) -> dict[str, str]:
             if mtype not in {"unicode", "normal_unicode"} or not mapping.text:
                 continue
             decoded = _decode_mapping(mapping.text)
-            if decoded is None:
+            if decoded is None or has_pua(decoded):
                 continue
             if mtype == "unicode":
                 best = decoded
@@ -76,6 +106,44 @@ def load_char_decl(tree: etree._ElementTree | etree._Element) -> dict[str, str]:
     return out
 
 
+def load_char_info(tree: etree._ElementTree | etree._Element) -> dict[str, GaijiInfo]:
+    """Map ``xml:id`` → :class:`GaijiInfo` for every ``<charDecl><char>``.
+
+    Used for the characters :func:`load_char_decl` cannot resolve (no Unicode mapping, or
+    only a private-use one), so the import can keep ``<g>`` and say what it stands for.
+    """
+    root = tree.getroot() if isinstance(tree, etree._ElementTree) else tree
+    xml_id = f"{{{'http://www.w3.org/XML/1998/namespace'}}}id"
+    out: dict[str, GaijiInfo] = {}
+    for char in root.iter(f"{_TEI}char"):
+        cid = char.get(xml_id)
+        if not cid:
+            continue
+        props: dict[str, str] = {}
+        for prop in char.iter(f"{_TEI}charProp"):
+            name = (prop.findtext(f"{_TEI}localName") or "").strip()
+            value = (prop.findtext(f"{_TEI}value") or "").strip()
+            if name and value:
+                props.setdefault(name, value)
+        pua = ""
+        for mapping in char.iter(f"{_TEI}mapping"):
+            if mapping.get("type") == "PUA" and (mapping.text or "").strip():
+                pua = mapping.text.strip()
+                break
+        out[cid] = GaijiInfo(
+            id=cid,
+            composition=props.get("composition", ""),
+            normalized=props.get("normalized form", ""),
+            pua=pua,
+        )
+    return out
+
+
+# Shown in place of a character that has neither a Unicode value nor a normalised form
+# (〓, the typesetter's "missing character" mark) — never a bare private-use code point.
+PLACEHOLDER = "〓"
+
+
 def resolve(g_el: etree._Element, char_map: dict[str, str]) -> str | None:
     """Return the Unicode replacement for a ``<g>`` element, or None to keep it."""
     ref = (g_el.get("ref") or "").lstrip("#")
@@ -84,18 +152,39 @@ def resolve(g_el: etree._Element, char_map: dict[str, str]) -> str | None:
     hit = char_map.get(ref)
     if hit:
         return hit
-    # some <g> carry the character as their own text content
+    # some <g> carry the character as their own text content — but a private-use code
+    # point there is CBETA's stand-in for a character Unicode lacks, not a resolution
     if g_el.text and g_el.text.strip():
-        return _decode_mapping(g_el.text)
-    return None  # TODO: consult bundled cb_gaiji.json; PUA fallback
+        decoded = _decode_mapping(g_el.text)
+        return None if decoded is None or has_pua(decoded) else decoded
+    return None  # TODO: consult bundled cb_gaiji.json
 
 
-def apply(body: etree._Element, char_map: dict[str, str]) -> int:
-    """Resolve every ``<g>`` in place. Returns the count resolved."""
+def apply(
+    body: etree._Element,
+    char_map: dict[str, str],
+    char_info: dict[str, GaijiInfo] | None = None,
+    kept: dict[str, GaijiInfo] | None = None,
+) -> int:
+    """Resolve every ``<g>`` in place. Returns the count resolved.
+
+    A ``<g>`` with no Unicode value stays a ``<g ref="#CB…">``, but its text is made
+    readable: the character's normalised form (網 for CB07560), else 〓 — never the private-use
+    code point. Each such character is recorded in ``kept`` (id → info) so the host can write
+    its ``<charDecl>`` entry.
+    """
     resolved = 0
     for g_el in list(body.iter(f"{_TEI}g")):
         repl = resolve(g_el, char_map)
         if repl is None:
+            ref = (g_el.get("ref") or "").lstrip("#")
+            if ref.startswith(("SD-", "RJ-")):
+                continue
+            info = (char_info or {}).get(ref) or GaijiInfo(id=ref)
+            if not g_el.text or not g_el.text.strip() or has_pua(g_el.text):
+                g_el.text = info.normalized or PLACEHOLDER
+            if kept is not None and ref:
+                kept.setdefault(ref, info)
             continue
         parent = g_el.getparent()
         if parent is None:

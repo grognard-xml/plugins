@@ -52,6 +52,12 @@ class JuanResult:
     body_xml: str
     straddles: list[str] = field(default_factory=list)
     report: dict[str, int] = field(default_factory=dict)
+    #: Characters left as ``<g ref>`` (no Unicode value): id, composition, normalised form, PUA.
+    gaiji: list[dict[str, str]] = field(default_factory=list)
+    #: Mulu split: the CBETA juan this section is in (``""`` otherwise).
+    in_juan: str = ""
+    #: Mulu split: ``body_xml`` already opens with the section's ``<head>``s.
+    heads_included: bool = False
 
 
 @dataclass
@@ -83,6 +89,9 @@ class ConvertResult:
                     "body_xml": j.body_xml,
                     "straddles": j.straddles,
                     "report": j.report,
+                    "gaiji": j.gaiji,
+                    "in_juan": j.in_juan,
+                    "heads_included": j.heads_included,
                 }
                 for j in self.juan
             ],
@@ -158,6 +167,7 @@ def _unwrap_empty(el: etree._Element, *, keep_tail: bool = True) -> None:
 def transform_juan(
     sl: JuanSlice,
     char_map: dict[str, str],
+    char_info: dict[str, gaiji.GaijiInfo] | None = None,
     *,
     cross_family: bool,
     clean: bool = False,
@@ -168,8 +178,9 @@ def transform_juan(
     for el in sl.elements:
         holder.append(el)
 
+    kept: dict[str, gaiji.GaijiInfo] = {}
     report = {
-        "gaiji_resolved": gaiji.apply(holder, char_map),
+        "gaiji_resolved": gaiji.apply(holder, char_map, char_info, kept),
         "style_dropped": _drop_style(holder),
         "reprint_lines_dropped": _drop_reprint_lines(holder),
         "orig_notes_dropped": _drop_orig_notes(holder),
@@ -190,7 +201,7 @@ def transform_juan(
     elif sl.apparatus:
         back = sl.apparatus[0]
         report["apparatus_apps"] = len(back.findall(f".//{_TEI}app"))
-        gaiji.apply(back, char_map)
+        gaiji.apply(back, char_map, char_info, kept)
         _drop_orig_notes(back)
         downgrade.phonetic_glosses(back)
         if cross_family:
@@ -198,12 +209,16 @@ def transform_juan(
             downgrade.mulu_and_divs(back)
             downgrade.structural(back)
 
+    report["gaiji_kept"] = len(kept)
     return JuanResult(
         n=sl.n,
         title=sl.title,
         body_xml=serialize_juan_body(sl),
         straddles=sl.straddles,
         report=report,
+        gaiji=[info.as_dict() for _, info in sorted(kept.items())],
+        in_juan=sl.in_juan,
+        heads_included=sl.heads_included,
     )
 
 
@@ -268,11 +283,16 @@ def convert_cbeta_work(
 
 
 def _split_work_body(
-    tree: etree._ElementTree, *, split_unit: str, warnings: list[str]
+    tree: etree._ElementTree,
+    *,
+    split_unit: str,
+    warnings: list[str],
+    char_map: dict[str, str] | None = None,
+    char_info: dict[str, gaiji.GaijiInfo] | None = None,
 ) -> list[JuanSlice]:
     unit = (split_unit or "mulu").lower()
     if unit == "mulu":
-        slices = split_body_into_mulu(tree)
+        slices = split_body_into_mulu(tree, char_map, char_info)
         if slices:
             return slices
         warnings.append("no mulu section headings found; fell back to juan split")
@@ -295,8 +315,10 @@ def _convert(
 
     trees = [_parse(f) for f in files]
     char_map: dict[str, str] = {}
+    char_info: dict[str, gaiji.GaijiInfo] = {}
     for t in trees:
         char_map.update(gaiji.load_char_decl(t))
+        char_info.update(gaiji.load_char_info(t))
 
     base_tree = trees[0]
     stem = files[0].stem
@@ -338,7 +360,13 @@ def _convert(
             f"({', '.join(f.stem for f in files)}) before juan split"
         )
 
-    slices = _split_work_body(base_tree, split_unit=split_unit, warnings=result.warnings)
+    slices = _split_work_body(
+        base_tree,
+        split_unit=split_unit,
+        warnings=result.warnings,
+        char_map=char_map,
+        char_info=char_info,
+    )
     if split_unit.lower() == "juan" and len(files) > 1:
         result.warnings.extend(stitch_cross_file_juan(slices))
     attach_apparatus(slices, find_back(base_tree))
@@ -347,6 +375,7 @@ def _convert(
             transform_juan(
                 sl,
                 char_map,
+                char_info,
                 cross_family=cross_family,
                 clean=clean,
                 strip_lb=strip_lb,

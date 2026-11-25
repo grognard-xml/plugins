@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0" xmlns:cb="http://www.cbeta.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt><title>Dictionary of terms cited from works</title></titleStmt>
+      <sourceDesc><bibl>test</bibl></sourceDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <milestone n="1" unit="juan"/>
+      <lb n="0001a01" ed="T"/>
+      <cb:mulu type="卷" n="1"/>
+      <cb:juan fun="open" n="1"><cb:jhead>音義卷第一</cb:jhead></cb:juan>
+      <byline cb:type="author">某撰</byline>
+      <cb:div type="other">
+        <cb:mulu level="1" type="其他">小乘經　單本</cb:mulu>
+        <list rend="no-marker"><item>正法念經</item><item>中阿含經</item></list>
+        <cb:div type="other">
+          <cb:mulu level="2" type="其他">正法念經</cb:mulu>
+          <head>正法念經</head>
+          <cb:div type="other">
+            <cb:mulu level="3" type="其他">第一卷</cb:mulu>
+            <head>第一卷</head>
+            <entry><form>矛</form><cb:def><p>甲。</p></cb:def></entry>
+          </cb:div>
+          <cb:div type="other">
+            <cb:mulu level="3" type="其他">第二卷</cb:mulu>
+            <head>第二卷</head>
+            <entry><form>鋑</form><cb:def><p>乙。</p></cb:def></entry>
+          </cb:div>
+        </cb:div>
+        <cb:div type="other">
+          <cb:mulu level="2" type="其他">中阿含經</cb:mulu>
+          <head>中阿含經</head>
+          <cb:div type="other">
+            <cb:mulu level="3" type="其他">第一卷</cb:mulu>
+            <head>第一卷</head>
+            <entry><form>鴳</form><cb:def><p>丙。</p></cb:def></entry>
+          </cb:div>
+        </cb:div>
+      </cb:div>
+      <cb:juan fun="close" n="1"/>
+      <milestone n="2" unit="juan"/>
+      <lb n="0002a01" ed="T"/>
+      <cb:mulu type="卷" n="2"/>
+      <cb:juan fun="open" n="2"><cb:jhead>音義卷第二</cb:jhead></cb:juan>
+      <cb:div type="other">
+        <cb:mulu level="2" type="其他">增一阿含經</cb:mulu>
+        <head>增一阿含經</head>
+        <cb:div type="other">
+          <cb:mulu level="3" type="其他">第一卷</cb:mulu>
+          <head>第一卷</head>
+          <entry><form>鷃</form><cb:def><p>丁。</p></cb:def></entry>
+        </cb:div>
+      </cb:div>
+    </body>
+  </text>
+</TEI>
