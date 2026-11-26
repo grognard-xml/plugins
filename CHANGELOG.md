@@ -19,6 +19,22 @@
 
 ## plugin-cbeta-import
 
+### 0.1.4
+
+#### Private-use gaiji kept as `<g>`
+
+- A private-use code point (CBETA's stand-in for a character with no Unicode value) was accepted as a resolution and written into the text, where it showed as a tofu box or a hexagram. It now stays as `<g ref="#CB…">` showing the normalised form (or 〓), and each juan result lists every such character (id, composition, normalised form, PUA) so the host can write its `<charDecl>`. Grognard 0.1.1-beta.11 does this; an older Grognard still shows the `<g>` but has no declaration for it.
+
+#### Each section keeps its work and juan context
+
+- A section's title is its own heading, not "A — B". The headings still in force above it are written as `<head type="context" n="LEVEL">`, so a cited work's title is carried into every one of its juan.
+- A juan's opening (milestone, jhead, byline) moves to the first section of that juan, and each section reports its CBETA juan (`in_juan`).
+- Titles are read whole: one with a `<g>` in it was cut at the `<g>` (大集賢護菩薩經 became 大集賢護菩).
+
+#### Mending earlier imports
+
+- `scripts/mend_imported_sections.py` repairs a mulu-split import made before these fixes (gaiji, section context, juan openings) without touching tagging done since. It is a dry run unless `--write-dir` is given, and never modifies project files.
+
 ### 0.1.3
 
 #### Dictionary entries and commentary kept (C1163 一切經音義)
